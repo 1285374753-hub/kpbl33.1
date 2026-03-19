@@ -76,23 +76,28 @@
 
         #startModal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 30; }
 
-        /* 全屏虚拟广告容器 */
-        #adModal {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            background-color: #111; display: none; flex-direction: column; 
-            justify-content: center; align-items: center; z-index: 100; color: white;
+        /* ================= 【新增：小窗广告提示 UI】 ================= */
+        #adToast {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.85); color: white; padding: 25px 30px;
+            border-radius: 16px; display: none; flex-direction: column; 
+            justify-content: center; align-items: center; z-index: 100; text-align: center;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            min-width: 220px;
         }
-        #adContentBox {
-            width: 85%; height: 40%; max-width: 350px; background-color: #333; border: 3px dashed #666;
-            display: flex; justify-content: center; align-items: center; text-align: center;
-            border-radius: 10px; margin-bottom: 30px; padding: 20px; box-sizing: border-box;
+        
+        .spinner-svg {
+            width: 50px; height: 50px; margin-bottom: 15px; transform: rotate(-90deg);
         }
-        #adPlaceholderText {
-            font-size: 20px; color: #fff; line-height: 1.5;
+        .spinner-bg { fill: none; stroke: #444; stroke-width: 5; }
+        .spinner-progress { 
+            fill: none; stroke: #FFC107; stroke-width: 5; 
+            stroke-linecap: round; stroke-dasharray: 142; stroke-dashoffset: 142;
         }
-        /* 将倒计时文字缩小 */
-        #adTimerText { font-size: 24px; font-weight: bold; color: #FFCA28; text-align: center; }
+        
+        #adToastText { font-size: 16px; font-weight: bold; line-height: 1.4; }
+        /* ============================================================== */
     </style>
 </head>
 <body>
@@ -135,13 +140,14 @@
             </div>
         </div>
 
-        <div id="adModal">
-            <div id="adContentBox">
-                <span id="adPlaceholderText">Carregando anúncio,<br>por favor aguarde...</span>
-            </div>
-            <div id="adTimerText">10s</div>
+        <div id="adToast">
+            <svg class="spinner-svg" id="spinnerSvg" viewBox="0 0 50 50">
+                <circle class="spinner-bg" cx="25" cy="25" r="22.5"></circle>
+                <circle class="spinner-progress" id="spinnerProgress" cx="25" cy="25" r="22.5"></circle>
+            </svg>
+            <div id="adToastText">Carregando anúncio...</div>
         </div>
-    </div>
+        </div>
 
     <script>
         const container = document.getElementById('app-container');
@@ -165,8 +171,11 @@
         const startModalEl = document.getElementById('startModal');
         const btnStart = document.getElementById('btnStart');
 
-        const adModal = document.getElementById('adModal');
-        const adTimerText = document.getElementById('adTimerText');
+        // 广告加载相关的 DOM
+        const adToast = document.getElementById('adToast');
+        const adToastText = document.getElementById('adToastText');
+        const spinnerProgress = document.getElementById('spinnerProgress');
+        const spinnerSvg = document.getElementById('spinnerSvg');
 
         let gameWidth = 0;
         let gameHeight = 0;
@@ -427,7 +436,9 @@
             gameOver = true; isCharging = false; messageEl.innerText = ""; deathReasonEl.innerText = reason;
             modalScoreEl.innerText = score; modalHighScoreEl.innerText = highScore;
             
+            // 隐藏左上角 HUD
             hudEl.style.display = 'none';
+            modalCoinsEl.innerText = totalCoins; // 更新结算面板金币
             
             if (adReviveCount < MAX_AD_REVIVE) {
                 btnAdRevive.style.display = 'block';
@@ -484,7 +495,7 @@
             
             const topBox = boxes[boxes.length - 1];
             player.x = topBox.x + topBox.width / 2 - player.width / 2; 
-            player.y = topBox.y - player.height; 
+            player.y = topBox.y - player.height; // 零误差贴合
             
             player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false; isCharging = false;
             
@@ -511,22 +522,37 @@
         btnRevive.addEventListener('click', handleCoinRevive);
         btnRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleCoinRevive(); }, {passive: false});
 
+        // ================= 【核心优化：5秒环形曲线广告倒计时】 =================
         function showVideoAd(onSuccess) {
-            adModal.style.display = 'flex';
+            // 显示小窗广告背景
+            adToast.style.display = 'flex';
+            spinnerSvg.style.display = 'block';
+            adToastText.innerHTML = "Carregando anúncio...";
             
-            let timeLeft = 10;
-            adTimerText.innerText = `${timeLeft}s`;
+            // 重置圆环动画
+            spinnerProgress.style.transition = 'none';
+            spinnerProgress.style.strokeDashoffset = '142';
             
-            let timer = setInterval(() => {
-                timeLeft--;
-                if (timeLeft > 0) {
-                    adTimerText.innerText = `${timeLeft}s`;
-                } else {
-                    clearInterval(timer);
-                    adModal.style.display = 'none';
-                    onSuccess(); 
-                }
-            }, 1000);
+            // 触发重绘以使 CSS 动画生效
+            void spinnerProgress.offsetWidth;
+            
+            // 开始 5 秒线性动画
+            spinnerProgress.style.transition = 'stroke-dashoffset 5s linear';
+            spinnerProgress.style.strokeDashoffset = '0';
+
+            // 5 秒后改变状态为“加载失败”并自动复活
+            setTimeout(() => {
+                spinnerSvg.style.display = 'none'; // 隐藏圆环
+                // 显示红色的失败提示
+                adToastText.innerHTML = "<span style='color:#ff5252; font-size:28px;'>✖</span><br>Falha ao carregar o anúncio";
+                
+                // 停留 1.5 秒让玩家看清失败提示，然后自动复活！
+                setTimeout(() => {
+                    adToast.style.display = 'none';
+                    onSuccess();
+                }, 1500);
+                
+            }, 5000);
         }
 
         function handleAdRevive() {
@@ -537,12 +563,13 @@
                 adReviveCount++; 
                 btnAdRevive.innerText = `📺 Reviver Grátis (Restam ${MAX_AD_REVIVE - adReviveCount} vezes)`;
                 btnAdRevive.disabled = false; btnRevive.disabled = false; btnRestart.disabled = false;
-                doReviveLogic("Reviveu com sucesso! Aproveite!");
+                doReviveLogic("Reviveu com sucesso! Aproveite!"); // 即便加载失败，也送给玩家复活
             });
         }
         
         btnAdRevive.addEventListener('click', handleAdRevive);
         btnAdRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleAdRevive(); }, {passive: false});
+        // =========================================================================
 
         window.addEventListener('resize', () => {
             if(!gameOver) {
