@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>跳跳奶酪 - 手机音效完美兼容版</title>
+    <title>跳跳奶酪 - 零延迟音频引擎版</title>
     <style>
         body { margin: 0; padding: 0; background-color: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; touch-action: none; }
         #app-container { position: relative; width: 100%; height: 100%; max-width: 430px; background-color: #B3E5FC; box-shadow: 0 0 30px rgba(0,0,0,0.8); overflow: hidden; }
@@ -140,17 +140,16 @@
         const player = { width: 50, height: 68, x: 0, y: 0, vx: 0, vy: 0, angle: 0, gravity: 0.65, jumpPower: -11.5, isJumping: false, isDeadFalling: false };
         let boxes = [], movingBox = null; 
 
-        // ================= 【核心大改：Web Audio API 手机兼容引擎】 =================
-        // BGM比较长，依然保留 Audio 标签播放（方便流式读取）
+        // ================= 【核心强化：零延迟 Web Audio API 引擎】 =================
         const audioBgm = new Audio('bgm.mp3'); 
         audioBgm.loop = true; 
 
-        // 创建专业音频上下文，处理短促音效
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
         const audioBuffers = {};
+        let isAudioUnlocked = false; // 标记是否已解锁硬件
 
-        // 异步预加载所有短促音效到内存中
+        // 异步预加载音效（如果你自己剪了静音去除了空白，也可以换成 .wav 格式并在这里修改后缀）
         async function loadSound(name, url) {
             try {
                 const response = await fetch(url);
@@ -158,7 +157,7 @@
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
                 audioBuffers[name] = audioBuffer;
             } catch (e) {
-                console.error("音效加载失败(可能文件没放对):", url, e);
+                console.error("音效加载失败:", url, e);
             }
         }
 
@@ -169,20 +168,37 @@
         loadSound('bomb', 'bomb.mp3');
         loadSound('death', 'death.mp3');
 
-        // 无延迟、无限制的播放函数
+        // 极速播放函数，移除了所有多余检查
         function playSound(name) {
             if (!audioBuffers[name]) return;
-            // 苹果手机安全机制：必须在播放前确保上下文未被挂起
-            if (audioCtx.state === 'suspended') audioCtx.resume(); 
-            
             const source = audioCtx.createBufferSource();
             source.buffer = audioBuffers[name];
             source.connect(audioCtx.destination);
             source.start(0);
         }
-        // ==============================================================================
 
-        // 场景与角色素材
+        // 音频硬件解锁器：播放一段极短的静音，强制唤醒休眠的音频芯片
+        function unlockAudioHardware() {
+            if (isAudioUnlocked) return;
+            
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            
+            const buffer = audioCtx.createBuffer(1, 1, 22050); // 极短的空白缓冲
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.start(0);
+            
+            isAudioUnlocked = true;
+        }
+
+        // 在玩家第一次触摸屏幕的瞬间（即使没点到按钮），立刻唤醒音频硬件！
+        window.addEventListener('touchstart', unlockAudioHardware, { once: true, passive: true });
+        window.addEventListener('mousedown', unlockAudioHardware, { once: true });
+        // =============================================================================
+
         const imgBg = new Image(); imgBg.src = 'bg.svg'; 
         const cheeseTypes = [
             { width: 140, height: 45, imgSrc: 'cheese_1.svg' }, 
@@ -197,7 +213,6 @@
             let img = new Image(); img.src = `player_red_${i}.svg`; capybaraImages.push(img);
         }
 
-        // 道具配置与素材
         const itemConfig = {
             'coin':      { maxSize: 35 }, 
             'big_coin':  { maxSize: 50 }, 
@@ -360,6 +375,9 @@
         function startJump(e) {
             if (e && e.type === 'touchstart') e.preventDefault(); 
             if (!isGameStarted || gameOver || autoDashCount > 0 || isRecovering) return; 
+            
+            unlockAudioHardware(); // 保险措施，跳跃时再次确保音频解锁
+
             if (!player.isJumping) { isCharging = true; messageEl.innerText = ""; }
         }
 
@@ -372,16 +390,17 @@
         canvas.addEventListener('touchstart', startJump, {passive: false});
         window.addEventListener('touchend', executeJump);
         
-        // 【重要】在用户第一次点击屏幕按钮时，强行解锁所有音频层
         btnStart.onclick = () => { 
-            startModalEl.style.display = 'none'; isGameStarted = true; init(); 
-            if (audioCtx.state === 'suspended') audioCtx.resume(); 
+            startModalEl.style.display = 'none'; 
+            isGameStarted = true; 
+            unlockAudioHardware();
+            init(); 
             audioBgm.currentTime = 0; audioBgm.play().catch(e => {});
         };
         
         btnRestart.onclick = () => { 
             init(); 
-            if (audioCtx.state === 'suspended') audioCtx.resume();
+            unlockAudioHardware();
             audioBgm.currentTime = 0; audioBgm.play().catch(e => {}); 
         };
         
@@ -399,8 +418,6 @@
                     player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false; isCharging = false;
                     
                     spawnBox(); gameOver = false; messageEl.innerText = "复活成功！继续跳跃！";
-                    
-                    if (audioCtx.state === 'suspended') audioCtx.resume();
                     audioBgm.play().catch(e => {}); 
                 }, 800); 
             } else {
@@ -539,14 +556,14 @@
 
             if (autoDashCount > 0 && movingBox) {
                 const topBox = boxes[boxes.length - 1]; const dist = topBox.x - movingBox.x;
-                movingBox.x += dist * 0.3; player.y = topBox.y - player.height - 40; player.vy = 0; player.isJumping = true;
+                movingBox.x += dist * 0.3; 
+
+                let targetPlayerX = topBox.x + topBox.width / 2 - player.width / 2;
+                player.x += (targetPlayerX - player.x) * 0.2; 
+                player.y = topBox.y - player.height - 40; player.vy = 0; player.isJumping = true;
 
                 if (Math.abs(dist) < 5) {
-                    movingBox.x = topBox.x; 
-                    let targetPlayerX = topBox.x + topBox.width / 2 - player.width / 2;
-                    player.x += (targetPlayerX - player.x) * 0.2; 
-                    boxes.push({...movingBox, bounceTimer: 20}); let stackedHeight = movingBox.height; movingBox = null;
-                    
+                    movingBox.x = topBox.x; boxes.push({...movingBox, bounceTimer: 20}); let stackedHeight = movingBox.height; movingBox = null;
                     playSound('land');
 
                     combo++; score += 2; scoreEl.innerText = "得分: " + score; 
