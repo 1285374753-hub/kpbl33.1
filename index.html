@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>跳跳奶酪 - 音效连发并发完美版</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; touch-action: none; }
+        #app-container { position: relative; width: 100%; height: 100%; max-width: 430px; background-color: #B3E5FC; box-shadow: 0 0 30px rgba(0,0,0,0.8); overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; background-color: #B3E5FC; }
+        
+        #hud {
+            position: absolute;
+            top: 6%; 
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center; 
+            z-index: 50;
+            pointer-events: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .score-box { display: flex; align-items: baseline; gap: 12px; }
+
+        #score { 
+            font-size: 36px; 
+            font-weight: 900; 
+            color: #fff; 
+            text-shadow: -2px -2px 0 #D4A373, 2px -2px 0 #D4A373, -2px 2px 0 #D4A373, 2px 2px 0 #D4A373, 0 4px 0 #Cda373;
+        }
+        
+        #highScoreDisplay { 
+            font-size: 20px; 
+            color: #FFD54F; 
+            font-weight: bold;
+            text-shadow: -1px -1px 0 #D4A373, 1px -1px 0 #D4A373, -1px 1px 0 #D4A373, 1px 1px 0 #D4A373, 0 2px 0 #Cda373;
+        }
+
+        #coinDisplay {
+            font-size: 32px; 
+            font-weight: 900;
+            color: #FFD700;
+            text-shadow: -2px -2px 0 #B8860B, 2px -2px 0 #B8860B, -2px 2px 0 #B8860B, 2px 2px 0 #B8860B, 0 4px 0 #8B6508;
+        }
+
+        #message { 
+            position: absolute;
+            top: 30%; 
+            width: 100%;
+            text-align: center;
+            font-size: 26px; 
+            color: #ff5252; 
+            font-weight: bold; 
+            text-shadow: 2px 2px 0px white, -2px -2px 0px white, 2px -2px 0px white, -2px 2px 0px white;
+            z-index: 10;
+            pointer-events: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #gameOverModal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 20; opacity: 0; transition: opacity 0.3s; }
+        .modal-content { background: #FFF; padding: 30px 20px; border-radius: 20px; text-align: center; width: 75%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 4px solid #FFCA28; }
+        .modal-title { font-size: 28px; font-weight: 900; color: #ff5252; margin-bottom: 10px; }
+        .modal-reason { font-size: 18px; color: #666; margin-bottom: 25px; font-weight: bold; }
+        .btn { display: block; width: 100%; padding: 15px 0; margin-bottom: 15px; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
+        .btn:active { transform: scale(0.95); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-revive { background-color: #4CAF50; color: white; box-shadow: 0 5px 0 #2E7D32; }
+        .btn-restart { background-color: #FFB300; color: white; box-shadow: 0 5px 0 #FF8F00; }
+        #startModal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 30; }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <div id="hud">
+            <div class="score-box">
+                <div id="score"></div>
+                <div id="highScoreDisplay"></div>
+            </div>
+            <div id="coinDisplay">💰 0</div>
+        </div>
+        
+        <div id="message">按住深蹲蓄力，松开起跳！</div>
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="gameOverModal">
+            <div class="modal-content">
+                <div class="modal-title">游戏结束</div>
+                <div class="modal-reason" id="deathReason">踩空啦！</div>
+                
+                <div style="margin-bottom: 20px; font-size: 16px; color: #666; font-weight: bold; background: #FFF9C4; padding: 10px; border-radius: 10px;">
+                    本次得分: <span id="modalScore" style="color: #ff5252; font-size: 26px;">0</span><br>
+                    最高记录: <span id="modalHighScore">0</span>
+                </div>
+
+                <button class="btn btn-revive" id="btnRevive">💖 复活 (消耗 50 💰)</button>
+                <button class="btn btn-restart" id="btnRestart">重新开始</button>
+            </div>
+        </div>
+        
+        <div id="startModal">
+            <div class="modal-content">
+                <div class="modal-title" style="color: #FF8F00;">跳跳奶酪</div>
+                <div class="modal-reason" style="font-size: 15px;">
+                    看准时机，按住并松开屏幕<br>把奶酪堆得更高吧！<br><br>
+                    <span style="color:#FF5252; font-weight:bold; font-size: 18px;" id="startHighScore">最高记录: 0</span>
+                </div>
+                <button class="btn" id="btnStart" style="background-color: #FF5252; color: white; box-shadow: 0 5px 0 #D32F2F;">▶ 开始游戏</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('app-container');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const messageEl = document.getElementById('message');
+        const highScoreEl = document.getElementById('highScoreDisplay');
+        const modalScoreEl = document.getElementById('modalScore');
+        const modalHighScoreEl = document.getElementById('modalHighScore');
+        const startHighScoreEl = document.getElementById('startHighScore');
+        const coinDisplayEl = document.getElementById('coinDisplay'); 
+        
+        const modalEl = document.getElementById('gameOverModal');
+        const deathReasonEl = document.getElementById('deathReason');
+        const btnRevive = document.getElementById('btnRevive');
+        const btnRestart = document.getElementById('btnRestart');
+        const startModalEl = document.getElementById('startModal');
+        const btnStart = document.getElementById('btnStart');
+
+        let gameWidth = 0;
+        let gameHeight = 0;
+
+        let isGameStarted = false, score = 0, gameOver = false, cameraY = 0, targetCameraY = 0, animationId;
+        let combo = 0, floatingTexts = [], autoDashCount = 0, fallingBoxes = [], isRecovering = false, isCharging = false;
+
+        const player = { width: 50, height: 68, x: 0, y: 0, vx: 0, vy: 0, angle: 0, gravity: 0.65, jumpPower: -11.5, isJumping: false, isDeadFalling: false };
+        let boxes = [], movingBox = null; 
+
+        // 音效系统
+        const audioBgm = new Audio('bgm.mp3'); audioBgm.loop = true; 
+        const sfxLand = new Audio('land.mp3');
+        const sfxCoin = new Audio('coin.mp3');
+        const sfxStar = new Audio('star.mp3');
+        const sfxRocket = new Audio('rocket.mp3');
+        const sfxBomb = new Audio('bomb.mp3');
+        const sfxDeath = new Audio('death.mp3');
+
+        // ================= 【核心优化：音效并发处理】 =================
+        function playSound(audioEl) {
+            if (!audioEl) return;
+            // 通过克隆节点，允许完全相同的音效在极短时间内重叠播放，绝不吞音
+            let soundClone = audioEl.cloneNode(); 
+            soundClone.volume = audioEl.volume; // 保持原有音量设置
+            soundClone.play().catch(e => console.log("等待玩家交互:", e));
+        }
+        // ==============================================================
+
+        // 场景与角色素材
+        const imgBg = new Image(); imgBg.src = 'bg.svg'; 
+        const cheeseTypes = [
+            { width: 140, height: 45, imgSrc: 'cheese_1.svg' }, 
+            { width: 100, height: 55, imgSrc: 'cheese_2.svg' }, 
+            { width: 70,  height: 65, imgSrc: 'cheese_3.svg' }  
+        ];
+        cheeseTypes.forEach(type => {
+            let img = new Image(); img.src = type.imgSrc; type.img = img; 
+        });
+        const capybaraImages = [];
+        for (let i = 1; i <= 7; i++) {
+            let img = new Image(); img.src = `player_red_${i}.svg`; capybaraImages.push(img);
+        }
+
+        // 道具配置与素材
+        const itemConfig = {
+            'coin':      { maxSize: 35 }, 
+            'big_coin':  { maxSize: 50 }, 
+            'trophy':    { maxSize: 45 }, 
+            'chest':     { maxSize: 45 }, 
+            'diamond':   { maxSize: 35 }, 
+            'rocket':    { maxSize: 55 }, 
+            'trap':      { maxSize: 50 }, 
+            'star':      { maxSize: 40 }  
+        };
+
+        const imgCoin = new Image(); imgCoin.src = 'coin.svg';
+        const imgBigCoin = new Image(); imgBigCoin.src = 'big_coin.svg';
+        const imgTrophy = new Image(); imgTrophy.src = 'trophy.svg';
+        const imgChest = new Image(); imgChest.src = 'chest.svg';
+        const imgDiamond = new Image(); imgDiamond.src = 'diamond.svg';
+        const imgRocket = new Image(); imgRocket.src = 'rocket.svg';
+        const imgBomb = new Image(); imgBomb.src = 'bomb.svg';
+        const imgStar = new Image(); imgStar.src = 'star.svg';
+
+        function getImgForType(type) {
+            if (type === 'coin') return imgCoin;
+            if (type === 'big_coin') return imgBigCoin;
+            if (type === 'trophy') return imgTrophy;
+            if (type === 'chest') return imgChest;
+            if (type === 'diamond') return imgDiamond;
+            if (type === 'rocket') return imgRocket;
+            if (type === 'trap') return imgBomb;
+            if (type === 'star') return imgStar;
+            return null;
+        }
+
+        function getItemSize(type) {
+            let cfg = itemConfig[type] || { maxSize: 35 };
+            let max = cfg.maxSize;
+            let tw = max, th = max; 
+            
+            let img = getImgForType(type);
+
+            if (img && img.complete && img.naturalWidth > 0) {
+                let aspect = img.naturalWidth / img.naturalHeight; 
+                if (aspect > 1) { 
+                    tw = max;
+                    th = max / aspect;
+                } else { 
+                    th = max;
+                    tw = max * aspect;
+                }
+            }
+            return { w: tw, h: th, img: img };
+        }
+
+        let highScore = parseInt(localStorage.getItem('jumpCheeseHighScore')) || 0;
+        let totalCoins = parseInt(localStorage.getItem('jumpCheeseTotalCoins')) || 0; 
+        coinDisplayEl.innerText = "💰 " + totalCoins;
+
+        function resizeCanvas() {
+            gameWidth = container.clientWidth;
+            gameHeight = container.clientHeight;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.style.width = gameWidth + 'px';
+            canvas.style.height = gameHeight + 'px';
+            canvas.width = gameWidth * dpr;
+            canvas.height = gameHeight * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            baseBoxWidth = gameWidth * 0.35; 
+            if (baseBoxWidth < 100) baseBoxWidth = 100;
+            if (baseBoxWidth > 150) baseBoxWidth = 150;
+        }
+
+        function init() {
+            if (animationId) cancelAnimationFrame(animationId); 
+            resizeCanvas();
+
+            score = 0; combo = 0; floatingTexts = []; autoDashCount = 0; fallingBoxes = []; 
+            isRecovering = false; gameOver = false; isCharging = false; 
+            cameraY = 0; targetCameraY = 0;
+            
+            scoreEl.innerText = "得分: " + score;
+            highScoreEl.innerText = "最高分: " + highScore;
+            messageEl.innerText = "按住深蹲蓄力，松开起跳！"; 
+            
+            modalEl.style.display = 'none';
+            modalEl.style.opacity = 0;
+
+            let startType = cheeseTypes[0];
+            boxes = [{ 
+                x: gameWidth / 2 - startType.width / 2, 
+                y: gameHeight * 0.75, 
+                width: startType.width, 
+                height: startType.height,
+                img: startType.img,
+                bounceTimer: 0 
+            }];
+            
+            player.x = gameWidth / 2 - player.width / 2;
+            player.y = boxes[0].y - player.height;
+            player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false;
+
+            spawnBox(); 
+            animationId = requestAnimationFrame(gameLoop); 
+        }
+
+        function spawnBox() {
+            const lastBox = boxes[boxes.length - 1]; 
+            const isLeft = Math.random() > 0.5;      
+            
+            let hasItem = Math.random() < 0.40; 
+            let itemType = 'coin';
+            if (hasItem) {
+                let r = Math.random();
+                if (r < 0.50) itemType = 'coin';         
+                else if (r < 0.70) itemType = 'trap';    
+                else if (r < 0.80) itemType = 'rocket';  
+                else if (r < 0.90) itemType = 'trophy';  
+                else if (r < 0.97) itemType = 'diamond'; 
+                else itemType = 'chest';                 
+            }
+            
+            let currentSpeed = 3.2; 
+            if (score >= 200) {
+                currentSpeed = 5.0 + Math.random() * 1.5; 
+            } else if (score >= 150) {
+                currentSpeed = 4.8 + Math.random() * 1.0; 
+            } else if (score >= 100) {
+                currentSpeed = 4.5 + Math.random() * 0.5; 
+            } else if (score >= 50) {
+                currentSpeed = 4.2; 
+            } else if (score >= 20) {
+                currentSpeed = 3.8; 
+            }
+            
+            let availableTypes = [cheeseTypes[0]]; 
+            if (score >= 20) availableTypes.push(cheeseTypes[1]); 
+            if (score >= 50) availableTypes.push(cheeseTypes[2]); 
+
+            let selectedType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+            
+            movingBox = {
+                x: isLeft ? -selectedType.width : gameWidth, 
+                y: lastBox.y - selectedType.height, 
+                width: selectedType.width, 
+                height: selectedType.height, 
+                speed: isLeft ? currentSpeed : -currentSpeed, 
+                item: hasItem ? { type: itemType, collected: false } : null,
+                img: selectedType.img 
+            };
+        }
+
+        function triggerGameOver(reason) {
+            gameOver = true; isCharging = false; messageEl.innerText = ""; deathReasonEl.innerText = reason;
+            modalScoreEl.innerText = score; modalHighScoreEl.innerText = highScore;
+            modalEl.style.display = 'flex'; setTimeout(() => modalEl.style.opacity = 1, 10);
+            playSound(sfxDeath); audioBgm.pause(); 
+        }
+
+        function startJump(e) {
+            if (e && e.type === 'touchstart') e.preventDefault(); 
+            if (!isGameStarted || gameOver || autoDashCount > 0 || isRecovering) return; 
+            if (!player.isJumping) { isCharging = true; messageEl.innerText = ""; }
+        }
+
+        function executeJump(e) {
+            if (isCharging) { isCharging = false; player.vy = player.jumpPower; player.isJumping = true; }
+        }
+
+        canvas.addEventListener('mousedown', startJump);
+        window.addEventListener('mouseup', executeJump);
+        canvas.addEventListener('touchstart', startJump, {passive: false});
+        window.addEventListener('touchend', executeJump);
+        
+        btnStart.onclick = () => { 
+            startModalEl.style.display = 'none'; isGameStarted = true; init(); 
+            audioBgm.currentTime = 0; audioBgm.play().catch(e => {});
+        };
+        
+        btnRestart.onclick = () => { 
+            init(); audioBgm.currentTime = 0; audioBgm.play().catch(e => {}); 
+        };
+        
+        btnRevive.onclick = () => {
+            if (totalCoins >= 50) {
+                totalCoins -= 50; localStorage.setItem('jumpCheeseTotalCoins', totalCoins); coinDisplayEl.innerText = "💰 " + totalCoins;
+                btnRevive.innerText = "复活中..."; btnRevive.disabled = true; btnRestart.disabled = true;
+                
+                setTimeout(() => {
+                    btnRevive.innerText = "💖 复活 (消耗 50 💰)"; btnRevive.disabled = false; btnRestart.disabled = false;
+                    modalEl.style.display = 'none'; modalEl.style.opacity = 0;
+                    
+                    const topBox = boxes[boxes.length - 1];
+                    player.x = topBox.x + topBox.width / 2 - player.width / 2; player.y = topBox.y - player.height;
+                    player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false; isCharging = false;
+                    
+                    spawnBox(); gameOver = false; messageEl.innerText = "复活成功！继续跳跃！";
+                    audioBgm.play().catch(e => {}); 
+                }, 800); 
+            } else {
+                const originalText = btnRevive.innerText; btnRevive.innerText = "金币不足！"; btnRevive.style.backgroundColor = "#9E9E9E"; btnRevive.style.boxShadow = "0 5px 0 #616161";
+                setTimeout(() => { btnRevive.innerText = originalText; btnRevive.style.backgroundColor = ""; btnRevive.style.boxShadow = ""; }, 1000);
+            }
+        };
+
+        window.addEventListener('resize', () => {
+            if(!gameOver) {
+                resizeCanvas();
+                if (!isGameStarted) {
+                    boxes[0].x = gameWidth / 2 - boxes[0].width / 2; boxes[0].y = gameHeight * 0.75;
+                    player.x = gameWidth / 2 - player.width / 2; player.y = boxes[0].y - player.height;
+                    draw();
+                }
+            }
+        });
+
+        function checkItemCollision(box) {
+            if (box && box.item && !box.item.collected) {
+                let sizeInfo = getItemSize(box.item.type);
+                let itemW = sizeInfo.w;
+                let itemH = sizeInfo.h;
+                
+                let itemX = box.x + box.width / 2;
+                let itemY = box.y - itemH / 2 - 5; 
+                
+                if (player.x < itemX + itemW / 2 && player.x + player.width > itemX - itemW / 2 && player.y < itemY + itemH / 2 && player.y + player.height > itemY - itemH / 2) {
+                    
+                    box.item.collected = true; 
+                    let addScore = 0, popText = "", popColor = "";
+
+                    if (box.item.type === 'coin') {
+                        playSound(sfxCoin); addScore = 0; totalCoins += 1; 
+                        popText = "+1 💰"; popColor = "#FFD700";
+                    } else if (box.item.type === 'big_coin') {
+                        playSound(sfxCoin); addScore = 0; totalCoins += 5; 
+                        popText = "+5 💰大金币!"; popColor = "#FF9800";
+                    } else if (box.item.type === 'trophy') {
+                        playSound(sfxCoin); addScore = 0; totalCoins += 5; 
+                        popText = "+5 💰奖杯!"; popColor = "#FF9800";
+                    } else if (box.item.type === 'chest') {
+                        playSound(sfxCoin); addScore = 0; totalCoins += 10; 
+                        popText = "+10 💰宝箱!"; popColor = "#FF6D00";
+                    } else if (box.item.type === 'diamond') {
+                        playSound(sfxStar); addScore = 20; 
+                        popText = "+20 💎钻石!"; popColor = "#00E5FF";
+                    } else if (box.item.type === 'rocket') {
+                        playSound(sfxRocket); addScore = 0; 
+                        popText = "🚀 火箭冲刺！"; popColor = "#FF5252"; 
+                        autoDashCount = 6; 
+                    } else if (box.item.type === 'trap') {
+                        if (autoDashCount > 0) {
+                            addScore = 0; popText = "免疫！"; popColor = "#BDBDBD";
+                        } else {
+                            playSound(sfxBomb);
+                            addScore = -5; popText = "💥 被炸！ -5"; popColor = "#212121";
+                            let breakCount = Math.min(3, boxes.length - 1);
+                            let heightLost = 0;
+                            for (let i = 0; i < breakCount; i++) {
+                                let b = boxes.pop();
+                                heightLost += b.height;
+                                b.vx = (Math.random() - 0.5) * 12; b.vy = -3 - Math.random() * 5; b.va = (Math.random() - 0.5) * 0.3; b.angle = 0;
+                                fallingBoxes.push(b);
+                            }
+                            if (breakCount > 0) {
+                                targetCameraY -= heightLost; player.vy = -12; player.isJumping = true; isRecovering = true;
+                                const topBox = boxes[boxes.length - 1]; player.x = topBox.x + topBox.width / 2 - player.width / 2; player.vx = 0;
+                                movingBox = null;
+                            }
+                        }
+                    }
+
+                    if (['coin', 'big_coin', 'trophy', 'chest'].includes(box.item.type)) {
+                        localStorage.setItem('jumpCheeseTotalCoins', totalCoins); 
+                        coinDisplayEl.innerText = "💰 " + totalCoins; 
+                    }
+
+                    score += addScore; if (score < 0) score = 0; scoreEl.innerText = "得分: " + score;
+                    if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
+                    highScoreEl.innerText = "最高分: " + highScore;
+                    floatingTexts.push({ x: itemX, y: itemY, text: popText, color: popColor, opacity: 1 });
+                }
+            }
+        }
+
+        function update() {
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                let ft = floatingTexts[i]; ft.y -= 1.5; ft.opacity -= 0.02; if (ft.opacity <= 0) floatingTexts.splice(i, 1); 
+            }
+            for (let i = fallingBoxes.length - 1; i >= 0; i--) {
+                let fb = fallingBoxes[i]; fb.vy += 0.5; fb.x += fb.vx; fb.y += fb.vy; fb.angle = (fb.angle || 0) + fb.va; 
+                if (fb.y > player.y + 1000) fallingBoxes.splice(i, 1);
+            }
+
+            if (gameOver) {
+                if (movingBox && movingBox.isToppling) { movingBox.vy = (movingBox.vy || 0) + 0.5; movingBox.y += movingBox.vy; movingBox.angle = (movingBox.angle || 0) + movingBox.va; }
+                if (player.isDeadFalling) { player.vy += 0.5; player.x += player.vx; player.y += player.vy; player.angle = (player.angle || 0) + (player.vx > 0 ? 0.08 : -0.08); }
+                return; 
+            }
+
+            cameraY += (targetCameraY - cameraY) * 0.1;
+
+            boxes.forEach(box => {
+                if (box.bounceTimer > 0) {
+                    box.bounceTimer--;
+                    let t = 20 - box.bounceTimer; 
+                    let squeeze = Math.sin(t * 0.5) * Math.exp(-t * 0.15) * 0.4; 
+                    box.scaleY = 1 - squeeze;        
+                    box.scaleX = 1 + squeeze * 0.5;  
+                } else {
+                    box.scaleY = 1;
+                    box.scaleX = 1;
+                }
+            });
+
+            if (movingBox && autoDashCount === 0) {
+                movingBox.x += movingBox.speed;
+                if ((movingBox.speed > 0 && movingBox.x > gameWidth) || (movingBox.speed < 0 && movingBox.x + movingBox.width < 0)) {
+                    if (player.isJumping) player.isDeadFalling = true; 
+                    else {
+                        movingBox = null; combo = 0; spawnBox(); 
+                        floatingTexts.push({ x: gameWidth / 2, y: player.y - 40, text: "跳过!", color: "#9E9E9E", opacity: 1 });
+                    }
+                }
+            }
+
+            if (player.isJumping) {
+                player.vy += player.gravity; player.y += player.vy;
+            } else {
+                const topBox = boxes[boxes.length - 1]; player.y = topBox.y - player.height; player.vy = 0; 
+            }
+
+            checkItemCollision(movingBox); checkItemCollision(boxes[boxes.length - 1]);
+
+            if (autoDashCount > 0 && movingBox) {
+                const topBox = boxes[boxes.length - 1]; const dist = topBox.x - movingBox.x;
+                movingBox.x += dist * 0.3; player.y = topBox.y - player.height - 40; player.vy = 0; player.isJumping = true;
+
+                if (Math.abs(dist) < 5) {
+                    movingBox.x = topBox.x; 
+                    let targetPlayerX = topBox.x + topBox.width / 2 - player.width / 2;
+                    player.x += (targetPlayerX - player.x) * 0.2; 
+                    boxes.push({...movingBox, bounceTimer: 20}); let stackedHeight = movingBox.height; movingBox = null;
+                    playSound(sfxLand);
+
+                    combo++; score += 2; scoreEl.innerText = "得分: " + score; 
+                    if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
+                    highScoreEl.innerText = "最高分: " + highScore;
+                    targetCameraY += stackedHeight; 
+                    floatingTexts.push({ x: topBox.x + topBox.width / 2, y: topBox.y, text: "Perfect!", color: "#FFD700", opacity: 1 });
+                    checkItemCollision(boxes[boxes.length - 1]); spawnBox(); autoDashCount--;
+                    if (autoDashCount === 0) { player.y = topBox.y - player.height; player.x = topBox.x + topBox.width / 2 - player.width / 2; player.vy = 0; player.isJumping = false; }
+                }
+                return; 
+            }
+
+            if (movingBox) {
+                if (!player.isJumping && movingBox.x < player.x + player.width && movingBox.x + movingBox.width > player.x && movingBox.y < player.y + player.height && movingBox.height + movingBox.y > player.y) {
+                    player.isDeadFalling = true; player.vy = -6; player.vx = movingBox.speed > 0 ? 5 : -5; triggerGameOver("被撞飞啦！"); 
+                }
+
+                if (player.isJumping && player.vy > 0 && player.y + player.height >= movingBox.y) {
+                    if (player.x + player.width > movingBox.x && player.x < movingBox.x + movingBox.width) {
+                        const topBox = boxes[boxes.length - 1]; const movingCenter = movingBox.x + movingBox.width / 2;
+                        const tolerance = Math.max(20, movingBox.width * 0.35);
+                        
+                        if (movingCenter < topBox.x - tolerance || movingCenter > topBox.x + topBox.width + tolerance) {
+                            movingBox.isToppling = true; movingBox.vy = 0; movingBox.va = (movingCenter < topBox.x) ? -0.06 : 0.06; 
+                            player.isDeadFalling = true; player.vy = -4; player.vx = (movingCenter < topBox.x) ? -3 : 3; triggerGameOver("重心不稳，塌方啦！");
+                        } else {
+                            player.y = movingBox.y - player.height; player.vy = 0; player.isJumping = false; 
+                            
+                            playSound(sfxLand);
+
+                            const diff = Math.abs(movingBox.x - topBox.x);
+                            let popText = "", popColor = "";
+
+                            if (diff < 15) {
+                                movingBox.x = topBox.x; combo++; score += 2; popColor = "#FFD700"; popText = combo > 1 ? `连击 x${combo}！ +2` : "完美！ +2";
+                            } else {
+                                combo = 0; score += 1; popColor = "#FFFFFF"; popText = "+1";
+                            }
+
+                            floatingTexts.push({ x: player.x + player.width / 2, y: player.y, text: popText, color: popColor, opacity: 1 });
+                            boxes.push({...movingBox, bounceTimer: 20}); let stackedHeight = movingBox.height; movingBox = null;
+                            scoreEl.innerText = "得分: " + score; 
+                            if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
+                            highScoreEl.innerText = "最高分: " + highScore;
+                            targetCameraY += stackedHeight; spawnBox(); 
+                        }
+                    } 
+                }
+            }
+
+            if (player.isJumping && player.vy > 0) {
+                const topBox = boxes[boxes.length - 1];
+                if (player.y + player.height >= topBox.y) {
+                    if (player.x + player.width > topBox.x && player.x < topBox.x + topBox.width) {
+                        player.y = topBox.y - player.height; player.vy = 0; player.isJumping = false;
+                        playSound(sfxLand); topBox.bounceTimer = 20;
+                        if (isRecovering) { isRecovering = false; spawnBox(); }
+                    } else if (player.y > topBox.y + topBox.height / 2) {
+                        player.isDeadFalling = true; player.vx = 0; triggerGameOver("踩空啦！");
+                    }
+                }
+            }
+        }
+
+        function drawCheese(box) {
+            if (box.img && box.img.complete && box.img.naturalWidth > 0) {
+                ctx.drawImage(box.img, box.x, box.y, box.width, box.height);
+            } else {
+                ctx.fillStyle = "#FFD54F"; ctx.fillRect(box.x, box.y, box.width, box.height);
+            }
+        }
+
+        function drawItem(box) {
+            if (box && box.item && !box.item.collected) {
+                let sizeInfo = getItemSize(box.item.type);
+                let itemW = sizeInfo.w;
+                let itemH = sizeInfo.h;
+                
+                let itemX = box.x + box.width / 2; 
+                let itemY = box.y - itemH / 2 - 5; 
+
+                let imgToDraw = sizeInfo.img;
+
+                ctx.save();
+                
+                if (imgToDraw && imgToDraw.complete && imgToDraw.naturalWidth > 0) {
+                    ctx.drawImage(imgToDraw, itemX - itemW / 2, itemY - itemH / 2, itemW, itemH);
+                } else {
+                    let itemRadius = Math.max(itemW, itemH) / 2;
+                    if (box.item.type === 'coin') {
+                        ctx.beginPath(); ctx.arc(itemX, itemY, itemRadius, 0, Math.PI * 2); ctx.fillStyle = "#FFD700"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#DAA520"; ctx.stroke(); ctx.fillStyle = "#DAA520"; ctx.font = "bold 18px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("1", itemX, itemY);
+                    } else if (box.item.type === 'big_coin') {
+                        ctx.beginPath(); ctx.arc(itemX, itemY, itemRadius, 0, Math.PI * 2); ctx.fillStyle = "#FFC107"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#FF8F00"; ctx.stroke(); ctx.fillStyle = "#D84315"; ctx.font = "bold 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("5", itemX, itemY);
+                    } else if (box.item.type === 'trophy') {
+                        ctx.beginPath(); ctx.arc(itemX, itemY, itemRadius, 0, Math.PI * 2); ctx.fillStyle = "#FF9800"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#F57C00"; ctx.stroke(); ctx.fillStyle = "#FFF"; ctx.font = "bold 18px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("杯", itemX, itemY);
+                    } else if (box.item.type === 'chest') {
+                        ctx.fillStyle = "#795548"; ctx.fillRect(itemX - itemW/2, itemY - itemH/2, itemW, itemH); ctx.strokeStyle = "#FFD700"; ctx.lineWidth = 2; ctx.strokeRect(itemX - itemW/2, itemY - itemH/2, itemW, itemH);
+                    } else if (box.item.type === 'diamond') {
+                        ctx.fillStyle = "#00E5FF"; ctx.beginPath(); ctx.moveTo(itemX, itemY - itemRadius); ctx.lineTo(itemX + itemRadius, itemY); ctx.lineTo(itemX, itemY + itemRadius); ctx.lineTo(itemX - itemRadius, itemY); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#00B8D4"; ctx.stroke();
+                    } else if (box.item.type === 'rocket') {
+                        ctx.fillStyle = "#FF5252"; ctx.beginPath(); ctx.moveTo(itemX, itemY - itemH/2); ctx.lineTo(itemX + itemW/2, itemY + itemH/2); ctx.lineTo(itemX - itemW/2, itemY + itemH/2); ctx.fill(); ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(itemX, itemY, 4, 0, Math.PI * 2); ctx.fill();
+                    } else if (box.item.type === 'trap') {
+                        ctx.fillStyle = "#2C3E50"; ctx.beginPath(); ctx.arc(itemX, itemY, itemRadius, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#8D6E63"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(itemX, itemY - itemRadius); ctx.quadraticCurveTo(itemX + 8, itemY - itemRadius - 6, itemX + 4, itemY - itemRadius - 10); ctx.stroke(); ctx.fillStyle = "#FF5252"; ctx.beginPath(); ctx.arc(itemX + 4, itemY - itemRadius - 10, 3, 0, Math.PI * 2); ctx.fill();
+                    } else if (box.item.type === 'star') {
+                        ctx.fillStyle = "#00E5FF"; ctx.beginPath(); ctx.moveTo(itemX, itemY - itemRadius); ctx.lineTo(itemX + itemRadius, itemY); ctx.lineTo(itemX, itemY + itemRadius); ctx.lineTo(itemX - itemRadius, itemY); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#00B8D4"; ctx.stroke();
+                    }
+                }
+                ctx.restore();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, gameWidth, gameHeight);
+            
+            if (imgBg.complete && imgBg.naturalWidth > 0) {
+                let bgWidth = gameWidth;
+                let bgHeight = imgBg.naturalHeight * (gameWidth / imgBg.naturalWidth); 
+                let parallaxSpeed = 0.2; 
+                let bgY = gameHeight - bgHeight + (cameraY * parallaxSpeed); 
+                if (bgY > 0) bgY = 0; 
+                ctx.drawImage(imgBg, 0, bgY, bgWidth, bgHeight);
+            } else {
+                ctx.fillStyle = "#B3E5FC"; ctx.fillRect(0, 0, gameWidth, gameHeight);
+            }
+
+            ctx.save();
+            ctx.translate(0, cameraY); 
+
+            fallingBoxes.forEach(fb => {
+                ctx.save();
+                let cx = fb.x + fb.width / 2; let cy = fb.y + fb.height / 2;
+                ctx.translate(cx, cy); ctx.rotate(fb.angle || 0); ctx.translate(-cx, -cy);
+                drawCheese(fb); 
+                ctx.restore();
+            });
+
+            boxes.forEach(box => {
+                let sx = box.scaleX || 1; let sy = box.scaleY || 1;
+                ctx.save();
+                let cx = box.x + box.width / 2; let cy = box.y + box.height; 
+                ctx.translate(cx, cy); ctx.scale(sx, sy); ctx.translate(-cx, -cy);
+                drawCheese(box); drawItem(box); 
+                ctx.restore();
+            });
+
+            if (movingBox) {
+                ctx.save();
+                if (movingBox.angle) {
+                    let cx = movingBox.x + movingBox.width / 2; let cy = movingBox.y + movingBox.height / 2;
+                    ctx.translate(cx, cy); ctx.rotate(movingBox.angle); ctx.translate(-cx, -cy);
+                }
+                drawCheese(movingBox); drawItem(movingBox); 
+                ctx.restore(); 
+            }
+
+            ctx.save();
+            if (player.angle) {
+                let px = player.x + player.width / 2; let py = player.y + player.height / 2;
+                ctx.translate(px, py); ctx.rotate(player.angle); ctx.translate(-px, -py);
+            }
+
+            let frameIdx = 0; 
+            if (isCharging) { frameIdx = 1; }
+            else if (player.isDeadFalling) { frameIdx = 6; }
+            else if (player.isJumping) {
+                if (player.vy < -8) frameIdx = 2; else if (player.vy < -2) frameIdx = 3; else if (player.vy >= -2 && player.vy <= 2) frameIdx = 4; else if (player.vy > 2 && player.vy < 8) frameIdx = 5; else frameIdx = 6; 
+            } else if (autoDashCount > 0) { frameIdx = 3; }
+
+            let currentImg = capybaraImages[frameIdx];
+
+            if (currentImg && currentImg.complete && currentImg.naturalWidth > 0) {
+                ctx.drawImage(currentImg, player.x, player.y, player.width, player.height);
+            } else {
+                ctx.fillStyle = "#FF5252"; 
+                if (isCharging) {
+                    ctx.beginPath(); ctx.roundRect(player.x, player.y + 15, player.width, player.height - 15, 8); ctx.fill();
+                    ctx.fillStyle = "white"; ctx.fillRect(player.x + 12, player.y + 25, 8, 8); ctx.fillRect(player.x + 30, player.y + 25, 8, 8);
+                    ctx.fillStyle = "black"; ctx.fillRect(player.x + 14, player.y + 27, 4, 4); ctx.fillRect(player.x + 32, player.y + 27, 4, 4);
+                } else {
+                    ctx.beginPath(); ctx.roundRect(player.x, player.y, player.width, player.height, 8); ctx.fill();
+                    ctx.fillStyle = "white"; ctx.fillRect(player.x + 12, player.y + 15, 8, 12); ctx.fillRect(player.x + 30, player.y + 15, 8, 12);
+                    ctx.fillStyle = "black"; ctx.fillRect(player.x + 14, player.y + 18, 4, 4); ctx.fillRect(player.x + 32, player.y + 18, 4, 4);
+                }
+            }
+
+            ctx.restore(); 
+
+            floatingTexts.forEach(ft => {
+                ctx.save(); ctx.globalAlpha = Math.max(0, ft.opacity); ctx.font = "bold 22px 'Segoe UI'"; ctx.fillStyle = ft.color; ctx.textAlign = "center"; ctx.strokeStyle = "rgba(0,0,0,0.8)"; ctx.lineWidth = 4; ctx.strokeText(ft.text, ft.x, ft.y); ctx.fillText(ft.text, ft.x, ft.y); ctx.restore();
+            });
+
+            ctx.restore();
+        }
+
+        function gameLoop() { update(); draw(); animationId = requestAnimationFrame(gameLoop); }
+
+        resizeCanvas(); 
+        
+        scoreEl.innerText = ""; 
+        highScoreEl.innerText = ""; 
+        messageEl.innerText = ""; 
+        startHighScoreEl.innerText = "最高记录: " + highScore; 
+        
+        let startType = cheeseTypes[0]; 
+        boxes = [{ x: gameWidth / 2 - startType.width / 2, y: gameHeight * 0.75, width: startType.width, height: startType.height, img: startType.img, bounceTimer: 0 }];
+        player.x = gameWidth / 2 - player.width / 2; player.y = boxes[0].y - player.height;
+        draw(); 
+    </script>
+</body>
+</html>
