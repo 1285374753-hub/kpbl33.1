@@ -20,6 +20,7 @@
             z-index: 50;
             pointer-events: none;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: opacity 0.3s; 
         }
 
         #score { 
@@ -71,6 +72,20 @@
         .btn-restart { background-color: #FFB300; color: white; box-shadow: 0 5px 0 #FF8F00; }
 
         #startModal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 30; }
+
+        /* 全屏虚拟广告容器 */
+        #adModal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background-color: #111; display: none; flex-direction: column; 
+            justify-content: center; align-items: center; z-index: 100; color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #adContentBox {
+            width: 85%; height: 45%; background-color: #333; border: 2px dashed #666;
+            display: flex; justify-content: center; align-items: center; text-align: center;
+            border-radius: 10px; margin-bottom: 20px; padding: 20px; box-sizing: border-box;
+        }
+        #adTimerText { font-size: 24px; font-weight: bold; margin-bottom: 25px; color: #FFCA28; }
     </style>
 </head>
 <body>
@@ -111,12 +126,21 @@
                 <button class="btn" id="btnStart" style="background-color: #FF5252; color: white; box-shadow: 0 5px 0 #D32F2F;">▶ Começar Jogo</button>
             </div>
         </div>
+
+        <div id="adModal">
+            <div id="adContentBox">
+                <span id="adPlaceholderText">Espaço reservado para vídeo publicitário<br>(Anúncio Virtual)</span>
+            </div>
+            <div id="adTimerText">5s</div>
+            <button class="btn btn-restart" id="btnAdClose" style="width: 60%; display: none;">Fechar (X)</button>
+        </div>
     </div>
 
     <script>
         const container = document.getElementById('app-container');
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const hudEl = document.getElementById('hud'); 
         const scoreEl = document.getElementById('score');
         const messageEl = document.getElementById('message');
         const highScoreEl = document.getElementById('highScoreDisplay');
@@ -133,6 +157,13 @@
         const startModalEl = document.getElementById('startModal');
         const btnStart = document.getElementById('btnStart');
 
+        // 广告相关 UI
+        const adModal = document.getElementById('adModal');
+        const adContentBox = document.getElementById('adContentBox');
+        const adPlaceholderText = document.getElementById('adPlaceholderText');
+        const adTimerText = document.getElementById('adTimerText');
+        const btnAdClose = document.getElementById('btnAdClose');
+
         let gameWidth = 0;
         let gameHeight = 0;
 
@@ -142,9 +173,7 @@
         const MAX_AD_REVIVE = 2;
         let adReviveCount = 0; 
 
-        const PLAYER_Y_OFFSET = 15; 
-        const BLOCK_Y_OFFSET = 15;  
-
+        // 主角物理参数
         const player = { width: 50, height: 68, x: 0, y: 0, vx: 0, vy: 0, angle: 0, gravity: 0.65, jumpPower: -11.5, isJumping: false, isDeadFalling: false };
         let boxes = [], movingBox = null; 
 
@@ -155,7 +184,6 @@
         const audioCtx = new AudioContext();
         const audioBuffers = {};
         let isAudioUnlocked = false; 
-        let hasAlertedError = false;
 
         async function loadSound(name, url) {
             try {
@@ -211,7 +239,8 @@
             if (!isGameStarted && boxes.length > 0 && boxes[0].img === imgCloudBase) {
                 let aspect = imgCloudBase.naturalHeight / imgCloudBase.naturalWidth;
                 boxes[0].height = boxes[0].width * aspect;
-                player.y = boxes[0].y - player.height + PLAYER_Y_OFFSET; 
+                // 零误差计算
+                player.y = boxes[0].y - player.height; 
                 draw();
             }
             triggerInitialDraw();
@@ -321,6 +350,7 @@
             highScoreEl.innerText = "Recorde: " + highScore;
             messageEl.innerText = "Segure para agachar, solte para pular!"; 
             
+            hudEl.style.display = 'flex';
             modalEl.style.display = 'none';
             modalEl.style.opacity = 0;
 
@@ -342,7 +372,7 @@
             }];
             
             player.x = gameWidth / 2 - player.width / 2;
-            player.y = boxes[0].y - player.height;
+            player.y = boxes[0].y - player.height; // 零误差物理接触，无下陷
             player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false;
 
             spawnBox(); 
@@ -381,7 +411,7 @@
             
             movingBox = {
                 x: isLeft ? -selectedType.width : gameWidth, 
-                y: lastBox.y - selectedType.height, 
+                y: lastBox.y - selectedType.height, // 零误差物理接触，无叠加缝隙
                 width: selectedType.width, 
                 height: selectedType.height, 
                 speed: isLeft ? currentSpeed : -currentSpeed, 
@@ -393,6 +423,9 @@
         function triggerGameOver(reason) {
             gameOver = true; isCharging = false; messageEl.innerText = ""; deathReasonEl.innerText = reason;
             modalScoreEl.innerText = score; modalHighScoreEl.innerText = highScore;
+            
+            // 隐藏左上角的 UI 数据
+            hudEl.style.display = 'none';
             
             if (adReviveCount < MAX_AD_REVIVE) {
                 btnAdRevive.style.display = 'block';
@@ -444,9 +477,12 @@
         
         function doReviveLogic(successMsg) {
             modalEl.style.display = 'none'; modalEl.style.opacity = 0;
+            
+            hudEl.style.display = 'flex';
+            
             const topBox = boxes[boxes.length - 1];
             player.x = topBox.x + topBox.width / 2 - player.width / 2; 
-            player.y = topBox.y - player.height; 
+            player.y = topBox.y - player.height; // 零误差贴合
             
             player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false; isCharging = false;
             
@@ -473,25 +509,51 @@
         btnRevive.addEventListener('click', handleCoinRevive);
         btnRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleCoinRevive(); }, {passive: false});
 
+        // ================= 【核心优化：全屏虚拟 5 秒广告逻辑】 =================
         function showVideoAd(onSuccess, onFail) {
-            console.log("Carregando anúncio em vídeo...");
-            setTimeout(() => { onSuccess(); }, 1500);
+            // 显示广告遮罩层
+            adModal.style.display = 'flex';
+            btnAdClose.style.display = 'none';
+            adPlaceholderText.innerHTML = "Espaço reservado para vídeo publicitário<br>(Anúncio Virtual)";
+            
+            let timeLeft = 5;
+            adTimerText.innerText = `${timeLeft}s`;
+
+            let timer = setInterval(() => {
+                timeLeft--;
+                if (timeLeft > 0) {
+                    adTimerText.innerText = `${timeLeft}s`;
+                } else {
+                    clearInterval(timer);
+                    // 5 秒结束后，模拟加载失败
+                    adTimerText.innerText = "Falha ao carregar o anúncio!";
+                    adPlaceholderText.innerHTML = "Erro 404: Anúncio indisponível.";
+                    btnAdClose.style.display = 'block'; // 显示关闭按钮
+                    
+                    btnAdClose.onclick = () => {
+                        adModal.style.display = 'none';
+                        onFail(); // 触发失败回调，返回游戏结算界面
+                    };
+                }
+            }, 1000);
         }
 
         function handleAdRevive() {
             forceUnlockAudio(); 
-            btnAdRevive.innerText = "Carregando anúncio...";
+            
+            // 锁定游戏内的按钮
             btnAdRevive.disabled = true; btnRevive.disabled = true; btnRestart.disabled = true;
             
             showVideoAd(
                 () => {
+                    // 这个成功回调在虚拟逻辑中暂时不会被触发，留给未来真实 SDK 使用
                     adReviveCount++; 
                     btnAdRevive.innerText = `📺 Reviver Grátis (Restam ${MAX_AD_REVIVE - adReviveCount} vezes)`;
                     btnAdRevive.disabled = false; btnRevive.disabled = false; btnRestart.disabled = false;
                     doReviveLogic("Reviveu com sucesso! Aproveite!");
                 }, 
                 () => {
-                    alert("O anúncio não foi visto até o fim. Sem chance de reviver~");
+                    // 广告失败，回到结算界面，不扣除广告次数
                     btnAdRevive.innerText = `📺 Reviver Grátis (Restam ${MAX_AD_REVIVE - adReviveCount} vezes)`;
                     btnAdRevive.disabled = false; btnRevive.disabled = false; btnRestart.disabled = false;
                 }
@@ -500,6 +562,7 @@
         
         btnAdRevive.addEventListener('click', handleAdRevive);
         btnAdRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleAdRevive(); }, {passive: false});
+        // =========================================================================
 
         window.addEventListener('resize', () => {
             if(!gameOver) {
@@ -557,7 +620,7 @@
                             let heightLost = 0;
                             for (let i = 0; i < breakCount; i++) {
                                 let b = boxes.pop();
-                                heightLost += b.height;
+                                heightLost += b.height; // 精确的掉落高度计算
                                 b.vx = (Math.random() - 0.5) * 12; b.vy = -3 - Math.random() * 5; b.va = (Math.random() - 0.5) * 0.3; b.angle = 0;
                                 fallingBoxes.push(b);
                             }
@@ -627,7 +690,7 @@
                 player.vy += player.gravity; player.y += player.vy;
             } else {
                 const topBox = boxes[boxes.length - 1]; 
-                player.y = topBox.y - player.height; 
+                player.y = topBox.y - player.height; // 零误差物理接触
                 player.vy = 0; 
             }
 
@@ -675,7 +738,7 @@
                             movingBox.isToppling = true; movingBox.vy = 0; movingBox.va = (movingCenter < topBox.x) ? -0.06 : 0.06; 
                             player.isDeadFalling = true; player.vy = -4; player.vx = (movingCenter < topBox.x) ? -3 : 3; triggerGameOver("Desequilibrado, desabou!");
                         } else {
-                            player.y = movingBox.y - player.height; 
+                            player.y = movingBox.y - player.height; // 零误差物理接触
                             player.vy = 0; player.isJumping = false; 
                             
                             playSound('land');
@@ -707,7 +770,7 @@
                 const topBox = boxes[boxes.length - 1];
                 if (player.y + player.height >= topBox.y) {
                     if (player.x + player.width > topBox.x && player.x < topBox.x + topBox.width) {
-                        player.y = topBox.y - player.height; 
+                        player.y = topBox.y - player.height; // 零误差物理接触
                         player.vy = 0; player.isJumping = false;
                         
                         playSound('land'); 
@@ -722,9 +785,10 @@
         }
 
         function drawCheese(box) {
+            // 云朵垫底绘制逻辑
             if (box.isFirstBox && imgCloudBase.complete && imgCloudBase.naturalWidth > 0) {
                 let aspect = imgCloudBase.naturalHeight / imgCloudBase.naturalWidth;
-                let cloudW = box.width * 1.5; 
+                let cloudW = box.width * 1.6; 
                 let cloudH = cloudW * aspect; 
                 let cloudX = box.x + box.width / 2 - cloudW / 2;
                 
