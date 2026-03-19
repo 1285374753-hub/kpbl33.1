@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>跳跳奶酪 - 零延迟音频引擎版</title>
+    <title>跳跳奶酪 - 终极音效除错版</title>
     <style>
         body { margin: 0; padding: 0; background-color: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; touch-action: none; }
         #app-container { position: relative; width: 100%; height: 100%; max-width: 430px; background-color: #B3E5FC; box-shadow: 0 0 30px rgba(0,0,0,0.8); overflow: hidden; }
@@ -60,14 +60,18 @@
         }
 
         #gameOverModal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 20; opacity: 0; transition: opacity 0.3s; }
-        .modal-content { background: #FFF; padding: 30px 20px; border-radius: 20px; text-align: center; width: 75%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 4px solid #FFCA28; }
-        .modal-title { font-size: 28px; font-weight: 900; color: #ff5252; margin-bottom: 10px; }
-        .modal-reason { font-size: 18px; color: #666; margin-bottom: 25px; font-weight: bold; }
-        .btn { display: block; width: 100%; padding: 15px 0; margin-bottom: 15px; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
+        .modal-content { background: #FFF; padding: 25px 20px; border-radius: 20px; text-align: center; width: 75%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 4px solid #FFCA28; }
+        .modal-title { font-size: 28px; font-weight: 900; color: #ff5252; margin-bottom: 5px; }
+        .modal-reason { font-size: 16px; color: #666; margin-bottom: 20px; font-weight: bold; }
+        
+        .btn { display: block; width: 100%; padding: 14px 0; margin-bottom: 12px; border: none; border-radius: 12px; font-size: 17px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
         .btn:active { transform: scale(0.95); }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        
         .btn-revive { background-color: #4CAF50; color: white; box-shadow: 0 5px 0 #2E7D32; }
+        .btn-ad { background-color: #9C27B0; color: white; box-shadow: 0 5px 0 #7B1FA2; }
         .btn-restart { background-color: #FFB300; color: white; box-shadow: 0 5px 0 #FF8F00; }
+
         #startModal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 30; }
     </style>
 </head>
@@ -90,12 +94,13 @@
                 <div class="modal-title">游戏结束</div>
                 <div class="modal-reason" id="deathReason">踩空啦！</div>
                 
-                <div style="margin-bottom: 20px; font-size: 16px; color: #666; font-weight: bold; background: #FFF9C4; padding: 10px; border-radius: 10px;">
+                <div style="margin-bottom: 15px; font-size: 16px; color: #666; font-weight: bold; background: #FFF9C4; padding: 10px; border-radius: 10px;">
                     本次得分: <span id="modalScore" style="color: #ff5252; font-size: 26px;">0</span><br>
                     最高记录: <span id="modalHighScore">0</span>
                 </div>
 
                 <button class="btn btn-revive" id="btnRevive">💖 复活 (消耗 50 💰)</button>
+                <button class="btn btn-ad" id="btnAdRevive">📺 免费复活 (剩余 2 次)</button>
                 <button class="btn btn-restart" id="btnRestart">重新开始</button>
             </div>
         </div>
@@ -127,6 +132,7 @@
         const modalEl = document.getElementById('gameOverModal');
         const deathReasonEl = document.getElementById('deathReason');
         const btnRevive = document.getElementById('btnRevive');
+        const btnAdRevive = document.getElementById('btnAdRevive'); 
         const btnRestart = document.getElementById('btnRestart');
         const startModalEl = document.getElementById('startModal');
         const btnStart = document.getElementById('btnStart');
@@ -136,28 +142,42 @@
 
         let isGameStarted = false, score = 0, gameOver = false, cameraY = 0, targetCameraY = 0, animationId;
         let combo = 0, floatingTexts = [], autoDashCount = 0, fallingBoxes = [], isRecovering = false, isCharging = false;
+        
+        const MAX_AD_REVIVE = 2;
+        let adReviveCount = 0; 
 
         const player = { width: 50, height: 68, x: 0, y: 0, vx: 0, vy: 0, angle: 0, gravity: 0.65, jumpPower: -11.5, isJumping: false, isDeadFalling: false };
         let boxes = [], movingBox = null; 
 
-        // ================= 【核心强化：零延迟 Web Audio API 引擎】 =================
-        const audioBgm = new Audio('bgm.mp3'); 
+        // ================= 【极强兼容版：手机音频解锁与防报错引擎】 =================
+        const audioBgm = new Audio('./bgm.mp3'); // 增加 ./ 强制相对路径
         audioBgm.loop = true; 
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
         const audioBuffers = {};
-        let isAudioUnlocked = false; // 标记是否已解锁硬件
+        let isAudioUnlocked = false; 
 
-        // 异步预加载音效（如果你自己剪了静音去除了空白，也可以换成 .wav 格式并在这里修改后缀）
+        // 添加错误弹窗标志，防止弹窗轰炸
+        let hasAlertedError = false;
+
         async function loadSound(name, url) {
             try {
-                const response = await fetch(url);
+                // 使用 ./ 确保在 GitHub Pages 相对目录中能找到文件
+                const response = await fetch('./' + url);
+                if (!response.ok) {
+                    throw new Error(`HTTP Error: ${response.status}`);
+                }
                 const arrayBuffer = await response.arrayBuffer();
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
                 audioBuffers[name] = audioBuffer;
             } catch (e) {
-                console.error("音效加载失败:", url, e);
+                console.error(`音效 [${url}] 加载或解码失败!`, e);
+                // 仅在本地测试环境或第一次报错时提醒开发者检查文件名
+                if (!hasAlertedError) {
+                    hasAlertedError = true;
+                    console.warn("⚠️ 提示: 如果你是在 Github 上运行且没声音，请绝对确保你上传的音频文件名字全都是小写，且为 .mp3 后缀！(比如不能是 Coin.mp3 或 coin.MP3)");
+                }
             }
         }
 
@@ -168,49 +188,46 @@
         loadSound('bomb', 'bomb.mp3');
         loadSound('death', 'death.mp3');
 
-        // 极速播放函数，移除了所有多余检查
+        // 物理强制解锁器
+        function forceUnlockAudio() {
+            if (isAudioUnlocked) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const buffer = audioCtx.createBuffer(1, 1, 22050); 
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            if (source.start) source.start(0);
+            isAudioUnlocked = true;
+        }
+
         function playSound(name) {
-            if (!audioBuffers[name]) return;
+            // 安全判定：如果字典里没这个音效，或者上下文被挂起，直接略过防止报错
+            if (!audioBuffers[name] || audioCtx.state === 'suspended') return;
             const source = audioCtx.createBufferSource();
             source.buffer = audioBuffers[name];
             source.connect(audioCtx.destination);
             source.start(0);
         }
+        
+        // 全局绑定：只要玩家碰了屏幕，立刻解锁音频
+        document.body.addEventListener('touchstart', forceUnlockAudio, { once: true, passive: true });
+        document.body.addEventListener('click', forceUnlockAudio, { once: true });
+        // ==============================================================================
 
-        // 音频硬件解锁器：播放一段极短的静音，强制唤醒休眠的音频芯片
-        function unlockAudioHardware() {
-            if (isAudioUnlocked) return;
-            
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-            
-            const buffer = audioCtx.createBuffer(1, 1, 22050); // 极短的空白缓冲
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtx.destination);
-            source.start(0);
-            
-            isAudioUnlocked = true;
-        }
-
-        // 在玩家第一次触摸屏幕的瞬间（即使没点到按钮），立刻唤醒音频硬件！
-        window.addEventListener('touchstart', unlockAudioHardware, { once: true, passive: true });
-        window.addEventListener('mousedown', unlockAudioHardware, { once: true });
-        // =============================================================================
-
-        const imgBg = new Image(); imgBg.src = 'bg.svg'; 
+        const imgBg = new Image(); imgBg.src = './bg.svg'; 
         const cheeseTypes = [
-            { width: 140, height: 45, imgSrc: 'cheese_1.svg' }, 
-            { width: 100, height: 55, imgSrc: 'cheese_2.svg' }, 
-            { width: 70,  height: 65, imgSrc: 'cheese_3.svg' }  
+            { width: 140, height: 45, imgSrc: './cheese_1.svg' }, 
+            { width: 100, height: 55, imgSrc: './cheese_2.svg' }, 
+            { width: 70,  height: 65, imgSrc: './cheese_3.svg' }  
         ];
         cheeseTypes.forEach(type => {
             let img = new Image(); img.src = type.imgSrc; type.img = img; 
         });
         const capybaraImages = [];
         for (let i = 1; i <= 7; i++) {
-            let img = new Image(); img.src = `player_red_${i}.svg`; capybaraImages.push(img);
+            let img = new Image(); img.src = `./player_red_${i}.svg`; capybaraImages.push(img);
         }
 
         const itemConfig = {
@@ -224,14 +241,14 @@
             'star':      { maxSize: 40 }  
         };
 
-        const imgCoin = new Image(); imgCoin.src = 'coin.svg';
-        const imgBigCoin = new Image(); imgBigCoin.src = 'big_coin.svg';
-        const imgTrophy = new Image(); imgTrophy.src = 'trophy.svg';
-        const imgChest = new Image(); imgChest.src = 'chest.svg';
-        const imgDiamond = new Image(); imgDiamond.src = 'diamond.svg';
-        const imgRocket = new Image(); imgRocket.src = 'rocket.svg';
-        const imgBomb = new Image(); imgBomb.src = 'bomb.svg';
-        const imgStar = new Image(); imgStar.src = 'star.svg';
+        const imgCoin = new Image(); imgCoin.src = './coin.svg';
+        const imgBigCoin = new Image(); imgBigCoin.src = './big_coin.svg';
+        const imgTrophy = new Image(); imgTrophy.src = './trophy.svg';
+        const imgChest = new Image(); imgChest.src = './chest.svg';
+        const imgDiamond = new Image(); imgDiamond.src = './diamond.svg';
+        const imgRocket = new Image(); imgRocket.src = './rocket.svg';
+        const imgBomb = new Image(); imgBomb.src = './bomb.svg';
+        const imgStar = new Image(); imgStar.src = './star.svg';
 
         function getImgForType(type) {
             if (type === 'coin') return imgCoin;
@@ -278,10 +295,6 @@
             canvas.width = gameWidth * dpr;
             canvas.height = gameHeight * dpr;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-            baseBoxWidth = gameWidth * 0.35; 
-            if (baseBoxWidth < 100) baseBoxWidth = 100;
-            if (baseBoxWidth > 150) baseBoxWidth = 150;
         }
 
         function init() {
@@ -291,6 +304,9 @@
             score = 0; combo = 0; floatingTexts = []; autoDashCount = 0; fallingBoxes = []; 
             isRecovering = false; gameOver = false; isCharging = false; 
             cameraY = 0; targetCameraY = 0;
+            
+            adReviveCount = 0; 
+            btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
             
             scoreEl.innerText = "得分: " + score;
             highScoreEl.innerText = "最高分: " + highScore;
@@ -333,22 +349,18 @@
                 else itemType = 'chest';                 
             }
             
-            let currentSpeed = 3.2; 
-            if (score >= 200) {
-                currentSpeed = 5.0 + Math.random() * 1.5; 
-            } else if (score >= 150) {
-                currentSpeed = 4.8 + Math.random() * 1.0; 
-            } else if (score >= 100) {
-                currentSpeed = 4.5 + Math.random() * 0.5; 
-            } else if (score >= 50) {
-                currentSpeed = 4.2; 
-            } else if (score >= 20) {
-                currentSpeed = 3.8; 
-            }
+            let currentSpeed = 2.8; 
+            
+            if (score >= 200) currentSpeed = 5.2 + Math.random() * 1.5; 
+            else if (score >= 150) currentSpeed = 4.8 + Math.random() * 1.0; 
+            else if (score >= 100) currentSpeed = 4.4 + Math.random() * 0.6; 
+            else if (score >= 60) currentSpeed = 4.0; 
+            else if (score >= 30) currentSpeed = 3.5; 
+            else if (score >= 10) currentSpeed = 3.2; 
             
             let availableTypes = [cheeseTypes[0]]; 
-            if (score >= 20) availableTypes.push(cheeseTypes[1]); 
-            if (score >= 50) availableTypes.push(cheeseTypes[2]); 
+            if (score >= 30) availableTypes.push(cheeseTypes[1]); 
+            if (score >= 70) availableTypes.push(cheeseTypes[2]); 
 
             let selectedType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
             
@@ -366,18 +378,21 @@
         function triggerGameOver(reason) {
             gameOver = true; isCharging = false; messageEl.innerText = ""; deathReasonEl.innerText = reason;
             modalScoreEl.innerText = score; modalHighScoreEl.innerText = highScore;
-            modalEl.style.display = 'flex'; setTimeout(() => modalEl.style.opacity = 1, 10);
             
-            playSound('death'); 
-            audioBgm.pause(); 
+            if (adReviveCount < MAX_AD_REVIVE) {
+                btnAdRevive.style.display = 'block';
+                btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
+            } else {
+                btnAdRevive.style.display = 'none';
+            }
+            
+            modalEl.style.display = 'flex'; setTimeout(() => modalEl.style.opacity = 1, 10);
+            playSound('death'); audioBgm.pause(); 
         }
 
         function startJump(e) {
             if (e && e.type === 'touchstart') e.preventDefault(); 
             if (!isGameStarted || gameOver || autoDashCount > 0 || isRecovering) return; 
-            
-            unlockAudioHardware(); // 保险措施，跳跃时再次确保音频解锁
-
             if (!player.isJumping) { isCharging = true; messageEl.innerText = ""; }
         }
 
@@ -390,41 +405,94 @@
         canvas.addEventListener('touchstart', startJump, {passive: false});
         window.addEventListener('touchend', executeJump);
         
-        btnStart.onclick = () => { 
+        // 按钮统一处理逻辑，彻底绑定交互解锁
+        function handleStartGame() {
+            forceUnlockAudio(); 
             startModalEl.style.display = 'none'; 
             isGameStarted = true; 
-            unlockAudioHardware();
             init(); 
-            audioBgm.currentTime = 0; audioBgm.play().catch(e => {});
-        };
+            audioBgm.currentTime = 0; 
+            audioBgm.play().catch(e => {});
+        }
+
+        btnStart.addEventListener('click', handleStartGame);
+        btnStart.addEventListener('touchstart', function(e) { e.preventDefault(); handleStartGame(); }, {passive: false});
         
-        btnRestart.onclick = () => { 
+        function handleRestart() {
+            forceUnlockAudio(); 
             init(); 
-            unlockAudioHardware();
-            audioBgm.currentTime = 0; audioBgm.play().catch(e => {}); 
-        };
+            audioBgm.currentTime = 0; 
+            audioBgm.play().catch(e => {}); 
+        }
         
-        btnRevive.onclick = () => {
+        btnRestart.addEventListener('click', handleRestart);
+        btnRestart.addEventListener('touchstart', function(e) { e.preventDefault(); handleRestart(); }, {passive: false});
+        
+        function doReviveLogic(successMsg) {
+            modalEl.style.display = 'none'; modalEl.style.opacity = 0;
+            const topBox = boxes[boxes.length - 1];
+            player.x = topBox.x + topBox.width / 2 - player.width / 2; player.y = topBox.y - player.height;
+            player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false; isCharging = false;
+            
+            spawnBox(); gameOver = false; messageEl.innerText = successMsg;
+            audioBgm.play().catch(e => {}); 
+        }
+
+        function handleCoinRevive() {
+            forceUnlockAudio(); 
             if (totalCoins >= 50) {
                 totalCoins -= 50; localStorage.setItem('jumpCheeseTotalCoins', totalCoins); coinDisplayEl.innerText = "💰 " + totalCoins;
-                btnRevive.innerText = "复活中..."; btnRevive.disabled = true; btnRestart.disabled = true;
+                btnRevive.innerText = "复活中..."; btnRevive.disabled = true; btnAdRevive.disabled = true; btnRestart.disabled = true;
                 
                 setTimeout(() => {
-                    btnRevive.innerText = "💖 复活 (消耗 50 💰)"; btnRevive.disabled = false; btnRestart.disabled = false;
-                    modalEl.style.display = 'none'; modalEl.style.opacity = 0;
-                    
-                    const topBox = boxes[boxes.length - 1];
-                    player.x = topBox.x + topBox.width / 2 - player.width / 2; player.y = topBox.y - player.height;
-                    player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false; isCharging = false;
-                    
-                    spawnBox(); gameOver = false; messageEl.innerText = "复活成功！继续跳跃！";
-                    audioBgm.play().catch(e => {}); 
+                    btnRevive.innerText = "💖 复活 (消耗 50 💰)"; btnRevive.disabled = false; btnAdRevive.disabled = false; btnRestart.disabled = false;
+                    doReviveLogic("金币复活成功！继续冲刺！");
                 }, 800); 
             } else {
                 const originalText = btnRevive.innerText; btnRevive.innerText = "金币不足！"; btnRevive.style.backgroundColor = "#9E9E9E"; btnRevive.style.boxShadow = "0 5px 0 #616161";
                 setTimeout(() => { btnRevive.innerText = originalText; btnRevive.style.backgroundColor = ""; btnRevive.style.boxShadow = ""; }, 1000);
             }
-        };
+        }
+        
+        btnRevive.addEventListener('click', handleCoinRevive);
+        btnRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleCoinRevive(); }, {passive: false});
+
+        // ================= 【专属广告接入 API】 =================
+        function showVideoAd(onSuccess, onFail) {
+            /** * 【说明】：如果后续接入穿山甲、Vungle或微信广告，把SDK触发代码写在这里即可！
+             * 成功看完调用 onSuccess();
+             * 中途关闭调用 onFail();
+             */
+            console.log("正在调起视频广告...");
+            // 默认用 1.5 秒延时来模拟看完一段短视频广告
+            setTimeout(() => {
+                onSuccess();
+            }, 1500);
+        }
+
+        function handleAdRevive() {
+            forceUnlockAudio(); 
+            btnAdRevive.innerText = "广告加载中...";
+            btnAdRevive.disabled = true; btnRevive.disabled = true; btnRestart.disabled = true;
+            
+            showVideoAd(
+                () => {
+                    adReviveCount++; 
+                    btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
+                    btnAdRevive.disabled = false; btnRevive.disabled = false; btnRestart.disabled = false;
+                    doReviveLogic("复活成功！把握机会！");
+                }, 
+                () => {
+                    alert("广告未看完，无法获得复活机会哦~");
+                    btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
+                    btnAdRevive.disabled = false; btnRevive.disabled = false; btnRestart.disabled = false;
+                }
+            );
+        }
+        
+        btnAdRevive.addEventListener('click', handleAdRevive);
+        btnAdRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleAdRevive(); }, {passive: false});
+        // ==============================================================
 
         window.addEventListener('resize', () => {
             if(!gameOver) {
