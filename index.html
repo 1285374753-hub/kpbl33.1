@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>跳跳奶酪 - 终极音效除错版</title>
+    <title>跳跳奶酪 - 无缝贴合 & 云朵加长版</title>
     <style>
         body { margin: 0; padding: 0; background-color: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; touch-action: none; }
         #app-container { position: relative; width: 100%; height: 100%; max-width: 430px; background-color: #B3E5FC; box-shadow: 0 0 30px rgba(0,0,0,0.8); overflow: hidden; }
@@ -13,19 +13,17 @@
             position: absolute;
             top: 6%; 
             left: 20px;
-            right: 20px;
             display: flex;
-            justify-content: space-between;
-            align-items: center; 
+            flex-direction: column; 
+            align-items: flex-start; 
+            gap: 8px; 
             z-index: 50;
             pointer-events: none;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        .score-box { display: flex; align-items: baseline; gap: 12px; }
-
         #score { 
-            font-size: 36px; 
+            font-size: 32px; 
             font-weight: 900; 
             color: #fff; 
             text-shadow: -2px -2px 0 #D4A373, 2px -2px 0 #D4A373, -2px 2px 0 #D4A373, 2px 2px 0 #D4A373, 0 4px 0 #Cda373;
@@ -39,7 +37,7 @@
         }
 
         #coinDisplay {
-            font-size: 32px; 
+            font-size: 26px; 
             font-weight: 900;
             color: #FFD700;
             text-shadow: -2px -2px 0 #B8860B, 2px -2px 0 #B8860B, -2px 2px 0 #B8860B, 2px 2px 0 #B8860B, 0 4px 0 #8B6508;
@@ -79,10 +77,8 @@
 
     <div id="app-container">
         <div id="hud">
-            <div class="score-box">
-                <div id="score"></div>
-                <div id="highScoreDisplay"></div>
-            </div>
+            <div id="score"></div>
+            <div id="highScoreDisplay"></div>
             <div id="coinDisplay">💰 0</div>
         </div>
         
@@ -146,38 +142,29 @@
         const MAX_AD_REVIVE = 2;
         let adReviveCount = 0; 
 
+        // 主角物理参数
         const player = { width: 50, height: 68, x: 0, y: 0, vx: 0, vy: 0, angle: 0, gravity: 0.65, jumpPower: -11.5, isJumping: false, isDeadFalling: false };
         let boxes = [], movingBox = null; 
 
-        // ================= 【极强兼容版：手机音频解锁与防报错引擎】 =================
-        const audioBgm = new Audio('./bgm.mp3'); // 增加 ./ 强制相对路径
+        // ================= 【音效引擎】 =================
+        const audioBgm = new Audio('./bgm.mp3'); 
         audioBgm.loop = true; 
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
         const audioBuffers = {};
         let isAudioUnlocked = false; 
-
-        // 添加错误弹窗标志，防止弹窗轰炸
         let hasAlertedError = false;
 
         async function loadSound(name, url) {
             try {
-                // 使用 ./ 确保在 GitHub Pages 相对目录中能找到文件
                 const response = await fetch('./' + url);
-                if (!response.ok) {
-                    throw new Error(`HTTP Error: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
                 const arrayBuffer = await response.arrayBuffer();
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
                 audioBuffers[name] = audioBuffer;
             } catch (e) {
-                console.error(`音效 [${url}] 加载或解码失败!`, e);
-                // 仅在本地测试环境或第一次报错时提醒开发者检查文件名
-                if (!hasAlertedError) {
-                    hasAlertedError = true;
-                    console.warn("⚠️ 提示: 如果你是在 Github 上运行且没声音，请绝对确保你上传的音频文件名字全都是小写，且为 .mp3 后缀！(比如不能是 Coin.mp3 或 coin.MP3)");
-                }
+                console.error(`音效 [${url}] 加载失败!`, e);
             }
         }
 
@@ -188,12 +175,9 @@
         loadSound('bomb', 'bomb.mp3');
         loadSound('death', 'death.mp3');
 
-        // 物理强制解锁器
         function forceUnlockAudio() {
             if (isAudioUnlocked) return;
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             const buffer = audioCtx.createBuffer(1, 1, 22050); 
             const source = audioCtx.createBufferSource();
             source.buffer = buffer;
@@ -203,7 +187,6 @@
         }
 
         function playSound(name) {
-            // 安全判定：如果字典里没这个音效，或者上下文被挂起，直接略过防止报错
             if (!audioBuffers[name] || audioCtx.state === 'suspended') return;
             const source = audioCtx.createBufferSource();
             source.buffer = audioBuffers[name];
@@ -211,23 +194,42 @@
             source.start(0);
         }
         
-        // 全局绑定：只要玩家碰了屏幕，立刻解锁音频
         document.body.addEventListener('touchstart', forceUnlockAudio, { once: true, passive: true });
         document.body.addEventListener('click', forceUnlockAudio, { once: true });
-        // ==============================================================================
+        
+        // ================= 【素材加载】 =================
+        function triggerInitialDraw() {
+            if (!isGameStarted) draw();
+        }
 
-        const imgBg = new Image(); imgBg.src = './bg.svg'; 
+        const imgBg = new Image(); 
+        imgBg.onload = triggerInitialDraw; 
+        imgBg.src = './bg.svg'; 
+
+        // 独立加载云朵素材
+        const imgCloudBase = new Image();
+        imgCloudBase.onload = triggerInitialDraw;
+        imgCloudBase.src = './cloud_base.svg'; 
+
         const cheeseTypes = [
             { width: 140, height: 45, imgSrc: './cheese_1.svg' }, 
             { width: 100, height: 55, imgSrc: './cheese_2.svg' }, 
             { width: 70,  height: 65, imgSrc: './cheese_3.svg' }  
         ];
+        
         cheeseTypes.forEach(type => {
-            let img = new Image(); img.src = type.imgSrc; type.img = img; 
+            let img = new Image(); 
+            img.onload = triggerInitialDraw; 
+            img.src = type.imgSrc; 
+            type.img = img; 
         });
+
         const capybaraImages = [];
         for (let i = 1; i <= 7; i++) {
-            let img = new Image(); img.src = `./player_red_${i}.svg`; capybaraImages.push(img);
+            let img = new Image(); 
+            img.onload = triggerInitialDraw; 
+            img.src = `./player_red_${i}.svg`; 
+            capybaraImages.push(img);
         }
 
         const itemConfig = {
@@ -241,14 +243,14 @@
             'star':      { maxSize: 40 }  
         };
 
-        const imgCoin = new Image(); imgCoin.src = './coin.svg';
-        const imgBigCoin = new Image(); imgBigCoin.src = './big_coin.svg';
-        const imgTrophy = new Image(); imgTrophy.src = './trophy.svg';
-        const imgChest = new Image(); imgChest.src = './chest.svg';
-        const imgDiamond = new Image(); imgDiamond.src = './diamond.svg';
-        const imgRocket = new Image(); imgRocket.src = './rocket.svg';
-        const imgBomb = new Image(); imgBomb.src = './bomb.svg';
-        const imgStar = new Image(); imgStar.src = './star.svg';
+        const imgCoin = new Image(); imgCoin.onload = triggerInitialDraw; imgCoin.src = './coin.svg';
+        const imgBigCoin = new Image(); imgBigCoin.onload = triggerInitialDraw; imgBigCoin.src = './big_coin.svg';
+        const imgTrophy = new Image(); imgTrophy.onload = triggerInitialDraw; imgTrophy.src = './trophy.svg';
+        const imgChest = new Image(); imgChest.onload = triggerInitialDraw; imgChest.src = './chest.svg';
+        const imgDiamond = new Image(); imgDiamond.onload = triggerInitialDraw; imgDiamond.src = './diamond.svg';
+        const imgRocket = new Image(); imgRocket.onload = triggerInitialDraw; imgRocket.src = './rocket.svg';
+        const imgBomb = new Image(); imgBomb.onload = triggerInitialDraw; imgBomb.src = './bomb.svg';
+        const imgStar = new Image(); imgStar.onload = triggerInitialDraw; imgStar.src = './star.svg';
 
         function getImgForType(type) {
             if (type === 'coin') return imgCoin;
@@ -309,23 +311,34 @@
             btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
             
             scoreEl.innerText = "得分: " + score;
-            highScoreEl.innerText = "最高分: " + highScore;
+            highScoreEl.innerText = "最高记录: " + highScore;
             messageEl.innerText = "按住深蹲蓄力，松开起跳！"; 
             
             modalEl.style.display = 'none';
             modalEl.style.opacity = 0;
 
+            // ================= 【核心优化：生成第一块加长奶酪】 =================
             let startType = cheeseTypes[0];
+            let baseW = 180; // 宽度绝对大于后续最大的奶酪(140)
+            let baseH = 45;  
+            if (startType.img && startType.img.complete && startType.img.naturalWidth > 0) {
+                // 完美保持奶酪素材的真实高宽比，绝不拉伸
+                baseH = baseW * (startType.img.naturalHeight / startType.img.naturalWidth);
+            }
+
             boxes = [{ 
-                x: gameWidth / 2 - startType.width / 2, 
-                y: gameHeight * 0.75, 
-                width: startType.width, 
-                height: startType.height,
+                x: gameWidth / 2 - baseW / 2, 
+                y: gameHeight * 0.6, 
+                width: baseW, 
+                height: baseH,
                 img: startType.img,
-                bounceTimer: 0 
+                bounceTimer: 0,
+                isFirstBox: true // 标记这是第一块，绘制时要在下方画云朵
             }];
+            // ======================================================================
             
             player.x = gameWidth / 2 - player.width / 2;
+            // 绝对零误差接触，无下陷无重叠
             player.y = boxes[0].y - player.height;
             player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false;
 
@@ -350,7 +363,6 @@
             }
             
             let currentSpeed = 2.8; 
-            
             if (score >= 200) currentSpeed = 5.2 + Math.random() * 1.5; 
             else if (score >= 150) currentSpeed = 4.8 + Math.random() * 1.0; 
             else if (score >= 100) currentSpeed = 4.4 + Math.random() * 0.6; 
@@ -366,6 +378,7 @@
             
             movingBox = {
                 x: isLeft ? -selectedType.width : gameWidth, 
+                // 绝对零误差计算，没有任何叠加和间隙
                 y: lastBox.y - selectedType.height, 
                 width: selectedType.width, 
                 height: selectedType.height, 
@@ -405,7 +418,6 @@
         canvas.addEventListener('touchstart', startJump, {passive: false});
         window.addEventListener('touchend', executeJump);
         
-        // 按钮统一处理逻辑，彻底绑定交互解锁
         function handleStartGame() {
             forceUnlockAudio(); 
             startModalEl.style.display = 'none'; 
@@ -431,7 +443,11 @@
         function doReviveLogic(successMsg) {
             modalEl.style.display = 'none'; modalEl.style.opacity = 0;
             const topBox = boxes[boxes.length - 1];
-            player.x = topBox.x + topBox.width / 2 - player.width / 2; player.y = topBox.y - player.height;
+            player.x = topBox.x + topBox.width / 2 - player.width / 2; 
+            
+            // 零误差复活
+            player.y = topBox.y - player.height; 
+            
             player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false; isCharging = false;
             
             spawnBox(); gameOver = false; messageEl.innerText = successMsg;
@@ -457,17 +473,9 @@
         btnRevive.addEventListener('click', handleCoinRevive);
         btnRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleCoinRevive(); }, {passive: false});
 
-        // ================= 【专属广告接入 API】 =================
         function showVideoAd(onSuccess, onFail) {
-            /** * 【说明】：如果后续接入穿山甲、Vungle或微信广告，把SDK触发代码写在这里即可！
-             * 成功看完调用 onSuccess();
-             * 中途关闭调用 onFail();
-             */
             console.log("正在调起视频广告...");
-            // 默认用 1.5 秒延时来模拟看完一段短视频广告
-            setTimeout(() => {
-                onSuccess();
-            }, 1500);
+            setTimeout(() => { onSuccess(); }, 1500);
         }
 
         function handleAdRevive() {
@@ -492,14 +500,15 @@
         
         btnAdRevive.addEventListener('click', handleAdRevive);
         btnAdRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleAdRevive(); }, {passive: false});
-        // ==============================================================
 
         window.addEventListener('resize', () => {
             if(!gameOver) {
                 resizeCanvas();
                 if (!isGameStarted) {
-                    boxes[0].x = gameWidth / 2 - boxes[0].width / 2; boxes[0].y = gameHeight * 0.75;
-                    player.x = gameWidth / 2 - player.width / 2; player.y = boxes[0].y - player.height;
+                    boxes[0].x = gameWidth / 2 - boxes[0].width / 2; 
+                    boxes[0].y = gameHeight * 0.6; 
+                    player.x = gameWidth / 2 - player.width / 2; 
+                    player.y = boxes[0].y - player.height;
                     draw();
                 }
             }
@@ -567,7 +576,7 @@
 
                     score += addScore; if (score < 0) score = 0; scoreEl.innerText = "得分: " + score;
                     if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
-                    highScoreEl.innerText = "最高分: " + highScore;
+                    highScoreEl.innerText = "最高记录: " + highScore;
                     floatingTexts.push({ x: itemX, y: itemY, text: popText, color: popColor, opacity: 1 });
                 }
             }
@@ -617,7 +626,9 @@
             if (player.isJumping) {
                 player.vy += player.gravity; player.y += player.vy;
             } else {
-                const topBox = boxes[boxes.length - 1]; player.y = topBox.y - player.height; player.vy = 0; 
+                const topBox = boxes[boxes.length - 1]; 
+                player.y = topBox.y - player.height; // 零误差贴合
+                player.vy = 0; 
             }
 
             checkItemCollision(movingBox); checkItemCollision(boxes[boxes.length - 1]);
@@ -631,16 +642,21 @@
                 player.y = topBox.y - player.height - 40; player.vy = 0; player.isJumping = true;
 
                 if (Math.abs(dist) < 5) {
-                    movingBox.x = topBox.x; boxes.push({...movingBox, bounceTimer: 20}); let stackedHeight = movingBox.height; movingBox = null;
+                    movingBox.x = topBox.x; boxes.push({...movingBox, bounceTimer: 20}); 
+                    let stackedHeight = movingBox.height; 
+                    movingBox = null;
                     playSound('land');
 
                     combo++; score += 2; scoreEl.innerText = "得分: " + score; 
                     if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
-                    highScoreEl.innerText = "最高分: " + highScore;
+                    highScoreEl.innerText = "最高记录: " + highScore;
                     targetCameraY += stackedHeight; 
                     floatingTexts.push({ x: topBox.x + topBox.width / 2, y: topBox.y, text: "Perfect!", color: "#FFD700", opacity: 1 });
                     checkItemCollision(boxes[boxes.length - 1]); spawnBox(); autoDashCount--;
-                    if (autoDashCount === 0) { player.y = topBox.y - player.height; player.x = topBox.x + topBox.width / 2 - player.width / 2; player.vy = 0; player.isJumping = false; }
+                    if (autoDashCount === 0) { 
+                        player.y = topBox.y - player.height; 
+                        player.x = topBox.x + topBox.width / 2 - player.width / 2; player.vy = 0; player.isJumping = false; 
+                    }
                 }
                 return; 
             }
@@ -659,7 +675,8 @@
                             movingBox.isToppling = true; movingBox.vy = 0; movingBox.va = (movingCenter < topBox.x) ? -0.06 : 0.06; 
                             player.isDeadFalling = true; player.vy = -4; player.vx = (movingCenter < topBox.x) ? -3 : 3; triggerGameOver("重心不稳，塌方啦！");
                         } else {
-                            player.y = movingBox.y - player.height; player.vy = 0; player.isJumping = false; 
+                            player.y = movingBox.y - player.height; 
+                            player.vy = 0; player.isJumping = false; 
                             
                             playSound('land');
 
@@ -673,10 +690,13 @@
                             }
 
                             floatingTexts.push({ x: player.x + player.width / 2, y: player.y, text: popText, color: popColor, opacity: 1 });
-                            boxes.push({...movingBox, bounceTimer: 20}); let stackedHeight = movingBox.height; movingBox = null;
+                            boxes.push({...movingBox, bounceTimer: 20}); 
+                            let stackedHeight = movingBox.height; 
+                            movingBox = null;
+                            
                             scoreEl.innerText = "得分: " + score; 
                             if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
-                            highScoreEl.innerText = "最高分: " + highScore;
+                            highScoreEl.innerText = "最高记录: " + highScore;
                             targetCameraY += stackedHeight; spawnBox(); 
                         }
                     } 
@@ -687,7 +707,8 @@
                 const topBox = boxes[boxes.length - 1];
                 if (player.y + player.height >= topBox.y) {
                     if (player.x + player.width > topBox.x && player.x < topBox.x + topBox.width) {
-                        player.y = topBox.y - player.height; player.vy = 0; player.isJumping = false;
+                        player.y = topBox.y - player.height; 
+                        player.vy = 0; player.isJumping = false;
                         
                         playSound('land'); 
                         topBox.bounceTimer = 20;
@@ -700,13 +721,28 @@
             }
         }
 
+        // ================= 【在奶酪正下方渲染云朵】 =================
         function drawCheese(box) {
+            // 画云朵底座
+            if (box.isFirstBox && imgCloudBase.complete && imgCloudBase.naturalWidth > 0) {
+                let aspect = imgCloudBase.naturalHeight / imgCloudBase.naturalWidth;
+                let cloudW = box.width * 1.6; // 让云朵比第一块奶酪大 1.6 倍
+                let cloudH = cloudW * aspect; // 完美维持自然比例
+                let cloudX = box.x + box.width / 2 - cloudW / 2;
+                
+                // 将云朵绘制在奶酪的正下方偏下一点，让奶酪“坐”在云朵上
+                let cloudY = box.y + box.height - cloudH * 0.4; 
+                ctx.drawImage(imgCloudBase, cloudX, cloudY, cloudW, cloudH);
+            }
+
+            // 画奶酪本体
             if (box.img && box.img.complete && box.img.naturalWidth > 0) {
                 ctx.drawImage(box.img, box.x, box.y, box.width, box.height);
             } else {
                 ctx.fillStyle = "#FFD54F"; ctx.fillRect(box.x, box.y, box.width, box.height);
             }
         }
+        // ==============================================================
 
         function drawItem(box) {
             if (box && box.item && !box.item.collected) {
@@ -834,14 +870,32 @@
 
         resizeCanvas(); 
         
-        scoreEl.innerText = ""; 
-        highScoreEl.innerText = ""; 
+        scoreEl.innerText = "得分: " + score; 
+        highScoreEl.innerText = "最高记录: " + highScore; 
         messageEl.innerText = ""; 
         startHighScoreEl.innerText = "最高记录: " + highScore; 
         
+        // 游戏还未加载完毕前，临时绘制一下底座预览
         let startType = cheeseTypes[0]; 
-        boxes = [{ x: gameWidth / 2 - startType.width / 2, y: gameHeight * 0.75, width: startType.width, height: startType.height, img: startType.img, bounceTimer: 0 }];
-        player.x = gameWidth / 2 - player.width / 2; player.y = boxes[0].y - player.height;
+        let baseW = 180; // 专属超长奶酪底座
+        let baseH = 45;  
+        if (startType.img && startType.img.complete && startType.img.naturalWidth > 0) {
+            baseH = baseW * (startType.img.naturalHeight / startType.img.naturalWidth);
+        }
+
+        boxes = [{ 
+            x: gameWidth / 2 - baseW / 2, 
+            y: gameHeight * 0.6, 
+            width: baseW, 
+            height: baseH, 
+            img: startType.img, 
+            bounceTimer: 0,
+            isFirstBox: true
+        }];
+        player.x = gameWidth / 2 - player.width / 2; 
+        // 完美零距离贴合起跳点
+        player.y = boxes[0].y - player.height;
+        
         draw(); 
     </script>
 </body>
