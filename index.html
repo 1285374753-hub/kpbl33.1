@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>跳跳奶酪 - 无缝贴合 & 云朵加长版</title>
+    <title>Capybara Jump High</title>
     <style>
         body { margin: 0; padding: 0; background-color: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; touch-action: none; }
         #app-container { position: relative; width: 100%; height: 100%; max-width: 430px; background-color: #B3E5FC; box-shadow: 0 0 30px rgba(0,0,0,0.8); overflow: hidden; }
@@ -82,33 +82,33 @@
             <div id="coinDisplay">💰 0</div>
         </div>
         
-        <div id="message">按住深蹲蓄力，松开起跳！</div>
+        <div id="message">Segure para agachar, solte para pular!</div>
         <canvas id="gameCanvas"></canvas>
         
         <div id="gameOverModal">
             <div class="modal-content">
-                <div class="modal-title">游戏结束</div>
-                <div class="modal-reason" id="deathReason">踩空啦！</div>
+                <div class="modal-title">Fim de Jogo</div>
+                <div class="modal-reason" id="deathReason">Errou o pulo!</div>
                 
                 <div style="margin-bottom: 15px; font-size: 16px; color: #666; font-weight: bold; background: #FFF9C4; padding: 10px; border-radius: 10px;">
-                    本次得分: <span id="modalScore" style="color: #ff5252; font-size: 26px;">0</span><br>
-                    最高记录: <span id="modalHighScore">0</span>
+                    Pontuação: <span id="modalScore" style="color: #ff5252; font-size: 26px;">0</span><br>
+                    Recorde: <span id="modalHighScore">0</span>
                 </div>
 
-                <button class="btn btn-revive" id="btnRevive">💖 复活 (消耗 50 💰)</button>
-                <button class="btn btn-ad" id="btnAdRevive">📺 免费复活 (剩余 2 次)</button>
-                <button class="btn btn-restart" id="btnRestart">重新开始</button>
+                <button class="btn btn-revive" id="btnRevive">💖 Reviver (Custa 50 💰)</button>
+                <button class="btn btn-ad" id="btnAdRevive">📺 Reviver Grátis (Restam 2 vezes)</button>
+                <button class="btn btn-restart" id="btnRestart">Recomeçar</button>
             </div>
         </div>
         
         <div id="startModal">
             <div class="modal-content">
-                <div class="modal-title" style="color: #FF8F00;">跳跳奶酪</div>
+                <div class="modal-title" style="color: #FF8F00;">Capybara Jump High</div>
                 <div class="modal-reason" style="font-size: 15px;">
-                    看准时机，按住并松开屏幕<br>把奶酪堆得更高吧！<br><br>
-                    <span style="color:#FF5252; font-weight:bold; font-size: 18px;" id="startHighScore">最高记录: 0</span>
+                    Aguarde o momento certo, segure e solte a tela<br>Empilhe os queijos o mais alto possível!<br><br>
+                    <span style="color:#FF5252; font-weight:bold; font-size: 18px;" id="startHighScore">Recorde: 0</span>
                 </div>
-                <button class="btn" id="btnStart" style="background-color: #FF5252; color: white; box-shadow: 0 5px 0 #D32F2F;">▶ 开始游戏</button>
+                <button class="btn" id="btnStart" style="background-color: #FF5252; color: white; box-shadow: 0 5px 0 #D32F2F;">▶ Começar Jogo</button>
             </div>
         </div>
     </div>
@@ -142,11 +142,12 @@
         const MAX_AD_REVIVE = 2;
         let adReviveCount = 0; 
 
-        // 主角物理参数
+        const PLAYER_Y_OFFSET = 15; 
+        const BLOCK_Y_OFFSET = 15;  
+
         const player = { width: 50, height: 68, x: 0, y: 0, vx: 0, vy: 0, angle: 0, gravity: 0.65, jumpPower: -11.5, isJumping: false, isDeadFalling: false };
         let boxes = [], movingBox = null; 
 
-        // ================= 【音效引擎】 =================
         const audioBgm = new Audio('./bgm.mp3'); 
         audioBgm.loop = true; 
 
@@ -164,7 +165,7 @@
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
                 audioBuffers[name] = audioBuffer;
             } catch (e) {
-                console.error(`音效 [${url}] 加载失败!`, e);
+                console.error(`Falha ao carregar o efeito sonoro [${url}]!`, e);
             }
         }
 
@@ -197,7 +198,6 @@
         document.body.addEventListener('touchstart', forceUnlockAudio, { once: true, passive: true });
         document.body.addEventListener('click', forceUnlockAudio, { once: true });
         
-        // ================= 【素材加载】 =================
         function triggerInitialDraw() {
             if (!isGameStarted) draw();
         }
@@ -206,9 +206,16 @@
         imgBg.onload = triggerInitialDraw; 
         imgBg.src = './bg.svg'; 
 
-        // 独立加载云朵素材
         const imgCloudBase = new Image();
-        imgCloudBase.onload = triggerInitialDraw;
+        imgCloudBase.onload = () => {
+            if (!isGameStarted && boxes.length > 0 && boxes[0].img === imgCloudBase) {
+                let aspect = imgCloudBase.naturalHeight / imgCloudBase.naturalWidth;
+                boxes[0].height = boxes[0].width * aspect;
+                player.y = boxes[0].y - player.height + PLAYER_Y_OFFSET; 
+                draw();
+            }
+            triggerInitialDraw();
+        };
         imgCloudBase.src = './cloud_base.svg'; 
 
         const cheeseTypes = [
@@ -308,21 +315,19 @@
             cameraY = 0; targetCameraY = 0;
             
             adReviveCount = 0; 
-            btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
+            btnAdRevive.innerText = `📺 Reviver Grátis (Restam ${MAX_AD_REVIVE - adReviveCount} vezes)`;
             
-            scoreEl.innerText = "得分: " + score;
-            highScoreEl.innerText = "最高记录: " + highScore;
-            messageEl.innerText = "按住深蹲蓄力，松开起跳！"; 
+            scoreEl.innerText = "Pontuação: " + score;
+            highScoreEl.innerText = "Recorde: " + highScore;
+            messageEl.innerText = "Segure para agachar, solte para pular!"; 
             
             modalEl.style.display = 'none';
             modalEl.style.opacity = 0;
 
-            // ================= 【核心优化：生成第一块加长奶酪】 =================
             let startType = cheeseTypes[0];
-            let baseW = 180; // 宽度绝对大于后续最大的奶酪(140)
+            let baseW = 180; 
             let baseH = 45;  
             if (startType.img && startType.img.complete && startType.img.naturalWidth > 0) {
-                // 完美保持奶酪素材的真实高宽比，绝不拉伸
                 baseH = baseW * (startType.img.naturalHeight / startType.img.naturalWidth);
             }
 
@@ -333,12 +338,10 @@
                 height: baseH,
                 img: startType.img,
                 bounceTimer: 0,
-                isFirstBox: true // 标记这是第一块，绘制时要在下方画云朵
+                isFirstBox: true 
             }];
-            // ======================================================================
             
             player.x = gameWidth / 2 - player.width / 2;
-            // 绝对零误差接触，无下陷无重叠
             player.y = boxes[0].y - player.height;
             player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false;
 
@@ -378,7 +381,6 @@
             
             movingBox = {
                 x: isLeft ? -selectedType.width : gameWidth, 
-                // 绝对零误差计算，没有任何叠加和间隙
                 y: lastBox.y - selectedType.height, 
                 width: selectedType.width, 
                 height: selectedType.height, 
@@ -394,7 +396,7 @@
             
             if (adReviveCount < MAX_AD_REVIVE) {
                 btnAdRevive.style.display = 'block';
-                btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
+                btnAdRevive.innerText = `📺 Reviver Grátis (Restam ${MAX_AD_REVIVE - adReviveCount} vezes)`;
             } else {
                 btnAdRevive.style.display = 'none';
             }
@@ -444,8 +446,6 @@
             modalEl.style.display = 'none'; modalEl.style.opacity = 0;
             const topBox = boxes[boxes.length - 1];
             player.x = topBox.x + topBox.width / 2 - player.width / 2; 
-            
-            // 零误差复活
             player.y = topBox.y - player.height; 
             
             player.vx = 0; player.vy = 0; player.angle = 0; player.isJumping = false; player.isDeadFalling = false; isCharging = false;
@@ -458,14 +458,14 @@
             forceUnlockAudio(); 
             if (totalCoins >= 50) {
                 totalCoins -= 50; localStorage.setItem('jumpCheeseTotalCoins', totalCoins); coinDisplayEl.innerText = "💰 " + totalCoins;
-                btnRevive.innerText = "复活中..."; btnRevive.disabled = true; btnAdRevive.disabled = true; btnRestart.disabled = true;
+                btnRevive.innerText = "Revivendo..."; btnRevive.disabled = true; btnAdRevive.disabled = true; btnRestart.disabled = true;
                 
                 setTimeout(() => {
-                    btnRevive.innerText = "💖 复活 (消耗 50 💰)"; btnRevive.disabled = false; btnAdRevive.disabled = false; btnRestart.disabled = false;
-                    doReviveLogic("金币复活成功！继续冲刺！");
+                    btnRevive.innerText = "💖 Reviver (Custa 50 💰)"; btnRevive.disabled = false; btnAdRevive.disabled = false; btnRestart.disabled = false;
+                    doReviveLogic("Reviveu com moedas! Continue!");
                 }, 800); 
             } else {
-                const originalText = btnRevive.innerText; btnRevive.innerText = "金币不足！"; btnRevive.style.backgroundColor = "#9E9E9E"; btnRevive.style.boxShadow = "0 5px 0 #616161";
+                const originalText = btnRevive.innerText; btnRevive.innerText = "Moedas insuficientes!"; btnRevive.style.backgroundColor = "#9E9E9E"; btnRevive.style.boxShadow = "0 5px 0 #616161";
                 setTimeout(() => { btnRevive.innerText = originalText; btnRevive.style.backgroundColor = ""; btnRevive.style.boxShadow = ""; }, 1000);
             }
         }
@@ -474,25 +474,25 @@
         btnRevive.addEventListener('touchstart', function(e) { e.preventDefault(); handleCoinRevive(); }, {passive: false});
 
         function showVideoAd(onSuccess, onFail) {
-            console.log("正在调起视频广告...");
+            console.log("Carregando anúncio em vídeo...");
             setTimeout(() => { onSuccess(); }, 1500);
         }
 
         function handleAdRevive() {
             forceUnlockAudio(); 
-            btnAdRevive.innerText = "广告加载中...";
+            btnAdRevive.innerText = "Carregando anúncio...";
             btnAdRevive.disabled = true; btnRevive.disabled = true; btnRestart.disabled = true;
             
             showVideoAd(
                 () => {
                     adReviveCount++; 
-                    btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
+                    btnAdRevive.innerText = `📺 Reviver Grátis (Restam ${MAX_AD_REVIVE - adReviveCount} vezes)`;
                     btnAdRevive.disabled = false; btnRevive.disabled = false; btnRestart.disabled = false;
-                    doReviveLogic("复活成功！把握机会！");
+                    doReviveLogic("Reviveu com sucesso! Aproveite!");
                 }, 
                 () => {
-                    alert("广告未看完，无法获得复活机会哦~");
-                    btnAdRevive.innerText = `📺 免费复活 (剩余 ${MAX_AD_REVIVE - adReviveCount} 次)`;
+                    alert("O anúncio não foi visto até o fim. Sem chance de reviver~");
+                    btnAdRevive.innerText = `📺 Reviver Grátis (Restam ${MAX_AD_REVIVE - adReviveCount} vezes)`;
                     btnAdRevive.disabled = false; btnRevive.disabled = false; btnRestart.disabled = false;
                 }
             );
@@ -533,26 +533,26 @@
                         popText = "+1 💰"; popColor = "#FFD700";
                     } else if (box.item.type === 'big_coin') {
                         playSound('coin'); addScore = 0; totalCoins += 5; 
-                        popText = "+5 💰大金币!"; popColor = "#FF9800";
+                        popText = "+5 💰 Moeda Grande!"; popColor = "#FF9800";
                     } else if (box.item.type === 'trophy') {
                         playSound('coin'); addScore = 0; totalCoins += 5; 
-                        popText = "+5 💰奖杯!"; popColor = "#FF9800";
+                        popText = "+5 💰 Troféu!"; popColor = "#FF9800";
                     } else if (box.item.type === 'chest') {
                         playSound('coin'); addScore = 0; totalCoins += 10; 
-                        popText = "+10 💰宝箱!"; popColor = "#FF6D00";
+                        popText = "+10 💰 Baú!"; popColor = "#FF6D00";
                     } else if (box.item.type === 'diamond') {
                         playSound('star'); addScore = 20; 
-                        popText = "+20 💎钻石!"; popColor = "#00E5FF";
+                        popText = "+20 💎 Diamante!"; popColor = "#00E5FF";
                     } else if (box.item.type === 'rocket') {
                         playSound('rocket'); addScore = 0; 
-                        popText = "🚀 火箭冲刺！"; popColor = "#FF5252"; 
+                        popText = "🚀 Impulso de Foguete!"; popColor = "#FF5252"; 
                         autoDashCount = 6; 
                     } else if (box.item.type === 'trap') {
                         if (autoDashCount > 0) {
-                            addScore = 0; popText = "免疫！"; popColor = "#BDBDBD";
+                            addScore = 0; popText = "Imune!"; popColor = "#BDBDBD";
                         } else {
                             playSound('bomb');
-                            addScore = -5; popText = "💥 被炸！ -5"; popColor = "#212121";
+                            addScore = -5; popText = "💥 Explodiu! -5"; popColor = "#212121";
                             let breakCount = Math.min(3, boxes.length - 1);
                             let heightLost = 0;
                             for (let i = 0; i < breakCount; i++) {
@@ -574,9 +574,9 @@
                         coinDisplayEl.innerText = "💰 " + totalCoins; 
                     }
 
-                    score += addScore; if (score < 0) score = 0; scoreEl.innerText = "得分: " + score;
+                    score += addScore; if (score < 0) score = 0; scoreEl.innerText = "Pontuação: " + score;
                     if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
-                    highScoreEl.innerText = "最高记录: " + highScore;
+                    highScoreEl.innerText = "Recorde: " + highScore;
                     floatingTexts.push({ x: itemX, y: itemY, text: popText, color: popColor, opacity: 1 });
                 }
             }
@@ -618,7 +618,7 @@
                     if (player.isJumping) player.isDeadFalling = true; 
                     else {
                         movingBox = null; combo = 0; spawnBox(); 
-                        floatingTexts.push({ x: gameWidth / 2, y: player.y - 40, text: "跳过!", color: "#9E9E9E", opacity: 1 });
+                        floatingTexts.push({ x: gameWidth / 2, y: player.y - 40, text: "Pulou!", color: "#9E9E9E", opacity: 1 });
                     }
                 }
             }
@@ -627,7 +627,7 @@
                 player.vy += player.gravity; player.y += player.vy;
             } else {
                 const topBox = boxes[boxes.length - 1]; 
-                player.y = topBox.y - player.height; // 零误差贴合
+                player.y = topBox.y - player.height; 
                 player.vy = 0; 
             }
 
@@ -647,11 +647,11 @@
                     movingBox = null;
                     playSound('land');
 
-                    combo++; score += 2; scoreEl.innerText = "得分: " + score; 
+                    combo++; score += 2; scoreEl.innerText = "Pontuação: " + score; 
                     if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
-                    highScoreEl.innerText = "最高记录: " + highScore;
+                    highScoreEl.innerText = "Recorde: " + highScore;
                     targetCameraY += stackedHeight; 
-                    floatingTexts.push({ x: topBox.x + topBox.width / 2, y: topBox.y, text: "Perfect!", color: "#FFD700", opacity: 1 });
+                    floatingTexts.push({ x: topBox.x + topBox.width / 2, y: topBox.y, text: "Perfeito!", color: "#FFD700", opacity: 1 });
                     checkItemCollision(boxes[boxes.length - 1]); spawnBox(); autoDashCount--;
                     if (autoDashCount === 0) { 
                         player.y = topBox.y - player.height; 
@@ -663,7 +663,7 @@
 
             if (movingBox) {
                 if (!player.isJumping && movingBox.x < player.x + player.width && movingBox.x + movingBox.width > player.x && movingBox.y < player.y + player.height && movingBox.height + movingBox.y > player.y) {
-                    player.isDeadFalling = true; player.vy = -6; player.vx = movingBox.speed > 0 ? 5 : -5; triggerGameOver("被撞飞啦！"); 
+                    player.isDeadFalling = true; player.vy = -6; player.vx = movingBox.speed > 0 ? 5 : -5; triggerGameOver("Foi jogado longe!"); 
                 }
 
                 if (player.isJumping && player.vy > 0 && player.y + player.height >= movingBox.y) {
@@ -673,7 +673,7 @@
                         
                         if (movingCenter < topBox.x - tolerance || movingCenter > topBox.x + topBox.width + tolerance) {
                             movingBox.isToppling = true; movingBox.vy = 0; movingBox.va = (movingCenter < topBox.x) ? -0.06 : 0.06; 
-                            player.isDeadFalling = true; player.vy = -4; player.vx = (movingCenter < topBox.x) ? -3 : 3; triggerGameOver("重心不稳，塌方啦！");
+                            player.isDeadFalling = true; player.vy = -4; player.vx = (movingCenter < topBox.x) ? -3 : 3; triggerGameOver("Desequilibrado, desabou!");
                         } else {
                             player.y = movingBox.y - player.height; 
                             player.vy = 0; player.isJumping = false; 
@@ -684,7 +684,7 @@
                             let popText = "", popColor = "";
 
                             if (diff < 15) {
-                                movingBox.x = topBox.x; combo++; score += 2; popColor = "#FFD700"; popText = combo > 1 ? `连击 x${combo}！ +2` : "完美！ +2";
+                                movingBox.x = topBox.x; combo++; score += 2; popColor = "#FFD700"; popText = combo > 1 ? `Combo x${combo}! +2` : "Perfeito! +2";
                             } else {
                                 combo = 0; score += 1; popColor = "#FFFFFF"; popText = "+1";
                             }
@@ -694,9 +694,9 @@
                             let stackedHeight = movingBox.height; 
                             movingBox = null;
                             
-                            scoreEl.innerText = "得分: " + score; 
+                            scoreEl.innerText = "Pontuação: " + score; 
                             if (score > highScore) { highScore = score; localStorage.setItem('jumpCheeseHighScore', highScore); }
-                            highScoreEl.innerText = "最高记录: " + highScore;
+                            highScoreEl.innerText = "Recorde: " + highScore;
                             targetCameraY += stackedHeight; spawnBox(); 
                         }
                     } 
@@ -715,34 +715,29 @@
 
                         if (isRecovering) { isRecovering = false; spawnBox(); }
                     } else if (player.y > topBox.y + topBox.height / 2) {
-                        player.isDeadFalling = true; player.vx = 0; triggerGameOver("踩空啦！");
+                        player.isDeadFalling = true; player.vx = 0; triggerGameOver("Errou o pulo!");
                     }
                 }
             }
         }
 
-        // ================= 【在奶酪正下方渲染云朵】 =================
         function drawCheese(box) {
-            // 画云朵底座
             if (box.isFirstBox && imgCloudBase.complete && imgCloudBase.naturalWidth > 0) {
                 let aspect = imgCloudBase.naturalHeight / imgCloudBase.naturalWidth;
-                let cloudW = box.width * 1.6; // 让云朵比第一块奶酪大 1.6 倍
-                let cloudH = cloudW * aspect; // 完美维持自然比例
+                let cloudW = box.width * 1.5; 
+                let cloudH = cloudW * aspect; 
                 let cloudX = box.x + box.width / 2 - cloudW / 2;
                 
-                // 将云朵绘制在奶酪的正下方偏下一点，让奶酪“坐”在云朵上
                 let cloudY = box.y + box.height - cloudH * 0.4; 
                 ctx.drawImage(imgCloudBase, cloudX, cloudY, cloudW, cloudH);
             }
 
-            // 画奶酪本体
             if (box.img && box.img.complete && box.img.naturalWidth > 0) {
                 ctx.drawImage(box.img, box.x, box.y, box.width, box.height);
             } else {
                 ctx.fillStyle = "#FFD54F"; ctx.fillRect(box.x, box.y, box.width, box.height);
             }
         }
-        // ==============================================================
 
         function drawItem(box) {
             if (box && box.item && !box.item.collected) {
@@ -766,7 +761,7 @@
                     } else if (box.item.type === 'big_coin') {
                         ctx.beginPath(); ctx.arc(itemX, itemY, itemRadius, 0, Math.PI * 2); ctx.fillStyle = "#FFC107"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#FF8F00"; ctx.stroke(); ctx.fillStyle = "#D84315"; ctx.font = "bold 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("5", itemX, itemY);
                     } else if (box.item.type === 'trophy') {
-                        ctx.beginPath(); ctx.arc(itemX, itemY, itemRadius, 0, Math.PI * 2); ctx.fillStyle = "#FF9800"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#F57C00"; ctx.stroke(); ctx.fillStyle = "#FFF"; ctx.font = "bold 18px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("杯", itemX, itemY);
+                        ctx.beginPath(); ctx.arc(itemX, itemY, itemRadius, 0, Math.PI * 2); ctx.fillStyle = "#FF9800"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#F57C00"; ctx.stroke(); ctx.fillStyle = "#FFF"; ctx.font = "bold 18px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("T", itemX, itemY);
                     } else if (box.item.type === 'chest') {
                         ctx.fillStyle = "#795548"; ctx.fillRect(itemX - itemW/2, itemY - itemH/2, itemW, itemH); ctx.strokeStyle = "#FFD700"; ctx.lineWidth = 2; ctx.strokeRect(itemX - itemW/2, itemY - itemH/2, itemW, itemH);
                     } else if (box.item.type === 'diamond') {
@@ -870,14 +865,13 @@
 
         resizeCanvas(); 
         
-        scoreEl.innerText = "得分: " + score; 
-        highScoreEl.innerText = "最高记录: " + highScore; 
+        scoreEl.innerText = "Pontuação: " + score; 
+        highScoreEl.innerText = "Recorde: " + highScore; 
         messageEl.innerText = ""; 
-        startHighScoreEl.innerText = "最高记录: " + highScore; 
+        startHighScoreEl.innerText = "Recorde: " + highScore; 
         
-        // 游戏还未加载完毕前，临时绘制一下底座预览
         let startType = cheeseTypes[0]; 
-        let baseW = 180; // 专属超长奶酪底座
+        let baseW = 180; 
         let baseH = 45;  
         if (startType.img && startType.img.complete && startType.img.naturalWidth > 0) {
             baseH = baseW * (startType.img.naturalHeight / startType.img.naturalWidth);
@@ -893,7 +887,6 @@
             isFirstBox: true
         }];
         player.x = gameWidth / 2 - player.width / 2; 
-        // 完美零距离贴合起跳点
         player.y = boxes[0].y - player.height;
         
         draw(); 
